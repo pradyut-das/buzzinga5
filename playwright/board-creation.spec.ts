@@ -1,11 +1,14 @@
 import { test, expect } from "@playwright/test";
-import { createTestBoard, waitForBoardLoad } from "./utils/playwright";
+import { createTestBoard, signUpTestUser, waitForBoardLoad } from "./utils/playwright";
 
 // Note: Database is reset by the webServer before tests run
 // Each test should work with a clean database state
 
 test.describe("Board Creation", () => {
   test("should create a new board from homepage", async ({ page }) => {
+    // Boards require an account
+    await signUpTestUser(page);
+
     // Navigate to homepage
     await page.goto("/");
 
@@ -123,6 +126,7 @@ test.describe("Board Creation", () => {
   });
 
   test("should require both title and password", async ({ page }) => {
+    await signUpTestUser(page);
     await page.goto("/");
     await page.getByRole("button", { name: /create.*board/i }).click();
 

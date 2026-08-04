@@ -4,7 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { MessageSquare, User } from "lucide-react";
+import { MessageSquare, UserRoundX } from "lucide-react";
 import { ContributorBadge } from "@/components/contributor-badge";
 import { TagBadge } from "@/components/tag-badge";
 import { cn } from "@/lib/utils";
@@ -192,7 +192,7 @@ export function TaskCard({
           </div>
         ) : (
           <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-muted-foreground/40 px-2 py-0.5 text-xs text-muted-foreground">
-            <User className="h-3 w-3" />
+            <UserRoundX className="h-3 w-3" />
           </span>
         )}
       </div>

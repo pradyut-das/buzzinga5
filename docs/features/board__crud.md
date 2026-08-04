@@ -2,23 +2,26 @@
 
 ## Overview
 
-Boards are the top-level container for organizing work. Each board has its own columns, tasks, and contributors. Boards are password-protected — a password is required to access board content.
+Boards are the top-level container for organizing work. Each board has its own columns, tasks, and contributors. Boards are password-protected — a password (or board membership for a signed-in user, see [global\_\_user-accounts.md](global__user-accounts.md)) is required to access board content.
 
 ## User Flows
 
 ### Create a Board
 
-- Click "Create a Board" button on homepage
+- Click "Create a Board" on the homepage (signed out, the button is `Sign in to create a board`)
 - Dialog appears with title and password fields (both prefilled with suggestions)
 - Password field has eye icon to toggle visibility
 - User can use suggested values or enter custom title/password
 - Both fields are required — cannot be empty
 - Board is created and user is redirected to the board
+- A signed-in creator becomes the board `owner`
 
 ### Access a Board
 
 - Direct link format: `/boards/{uuid}`
-- If password cookie is not set, redirects to `/boards/{uuid}/unlock`
+- Signing in is required: visitors without a session are redirected to `/login?next={path}`
+- Members of the board are then let straight in, no password needed
+- Otherwise, if the password cookie is not set, redirects to `/boards/{uuid}/unlock`
 - Password entry page prompts for password
 - On correct password, cookie is set and user is redirected to board
 - On incorrect password, error message is shown
@@ -29,7 +32,7 @@ Boards are the top-level container for organizing work. Each board has its own c
 - Enter board password (eye icon to toggle visibility)
 - Password can be prefilled via query parameter: `/boards/{uuid}/unlock?password={password}`
 - Password is verified against the board’s stored password hash
-- On success: cookie is set, redirect to board
+- On success: cookie is set, redirect to board; a signed-in user also joins the board
 - On failure: error message displayed
 - User must click "Unlock Board" button to proceed (no auto-unlock)
 

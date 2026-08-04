@@ -4,7 +4,7 @@ import { db, rawClient } from "@/db";
 import { columns, tasks, taskAssignees, taskTags, comments } from "@/db/schema";
 import { eq, and, gt, gte, lt, lte, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getBoardPasswordOptional, requireBoardAccess } from "@/lib/secure-board";
+import { canAccessBoard, requireBoardAccess } from "@/lib/secure-board";
 import { TASK_PRIORITIES, type TaskPriority } from "@/db/schema";
 import { queueMoveNotification, queuePriorityNotification } from "@/lib/notifications";
 import { requireColumn, requireTask } from "@/lib/require-resource";
@@ -138,8 +138,8 @@ export async function getTask(id: string) {
   const taskRow = taskRes?.rows?.[0] as any;
   if (!taskRow) return null;
 
-  const passwordOk = await getBoardPasswordOptional(taskRow.boardId as string);
-  if (!passwordOk) return null;
+  const allowed = await canAccessBoard(taskRow.boardId as string);
+  if (!allowed) return null;
 
   return {
     id: String(taskRow.id),

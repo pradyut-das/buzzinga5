@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { boards, columns, tasks, contributors, taskAssignees } from "@/db/schema";
+import { boards, columns, tasks, contributors, taskAssignees, users } from "@/db/schema";
 import { hashPassword } from "@/lib/password-hash";
 import { setBoardPassword } from "@/lib/board-password";
+import { createSession, getCurrentUser } from "@/lib/auth/session";
+import { addBoardMember } from "@/lib/auth/membership";
 
 // Only available in test environments (PLAYWRIGHT_TEST is set by playwright config)
 // We can't rely on NODE_ENV because Next.js production builds force it to "production"
@@ -46,13 +48,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const boardId = crypto.randomUUID();
   const passwordHash = hashPassword(password);
 
+  // Boards require a signed-in owner, so seed a throwaway account when the
+  // request has no session yet.
+  let user = await getCurrentUser();
+  if (!user) {
+    const userId = crypto.randomUUID();
+    const email = `seed-${userId}@example.com`;
+    await db.insert(users).values({
+      id: userId,
+      email,
+      name: "Seed User",
+      passwordHash: hashPassword("seedpass123"),
+      createdAt: new Date(),
+    });
+    await createSession(userId);
+    user = { id: userId, email, name: "Seed User" };
+  }
+
   // Create board
   await db.insert(boards).values({
     id: boardId,
     title,
     passwordHash,
+    ownerId: user.id,
     createdAt: new Date(),
   });
+
+  await addBoardMember(boardId, user.id, "owner");
 
   // Create default columns
   const defaultColumnNames = ["📥 To do", "🔄 Doing", "✅ Done", "📦 Archive"];

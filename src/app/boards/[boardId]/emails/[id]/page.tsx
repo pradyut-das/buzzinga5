@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Mail, Clock, CheckCircle, User, FileText } from "lucide-react";
+import { ArrowLeft, Mail, Clock, CheckCircle, User, Type } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -132,7 +132,7 @@ export default function BoardEmailViewerPage({ params }: PageProps) {
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
+                <Type className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Subject:</span>
                 <span className="text-sm font-medium">{email.subject}</span>
               </div>

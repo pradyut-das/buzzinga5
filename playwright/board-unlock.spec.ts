@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { seedTestBoard, waitForBoardLoad } from "./utils/playwright";
+import { seedTestBoard, waitForBoardLoad, signUpTestUser } from "./utils/playwright";
 
 test.describe("Board Unlock", () => {
   test("should redirect to unlock page when accessing board without password", async ({
@@ -11,6 +11,7 @@ test.describe("Board Unlock", () => {
 
     // Clear cookies to simulate not having password
     await context.clearCookies();
+    await signUpTestUser(page, "unlock");
 
     // Try to access the board
     await page.goto(`/boards/${boardId}`);
@@ -31,6 +32,7 @@ test.describe("Board Unlock", () => {
 
     // Clear cookies
     await context.clearCookies();
+    await signUpTestUser(page, "unlock");
 
     // Navigate to unlock page
     await page.goto(`/boards/${boardId}/unlock`);
@@ -56,6 +58,7 @@ test.describe("Board Unlock", () => {
 
     // Clear cookies
     await context.clearCookies();
+    await signUpTestUser(page, "unlock");
 
     // Navigate to unlock page
     await page.goto(`/boards/${boardId}/unlock`);
@@ -84,6 +87,7 @@ test.describe("Board Unlock", () => {
 
     // Clear cookies
     await context.clearCookies();
+    await signUpTestUser(page, "unlock");
 
     // Navigate to unlock page with password in query
     await page.goto(`/boards/${boardId}/unlock?password=prefillpass123`);
@@ -216,6 +220,7 @@ test.describe("Board Unlock", () => {
 
     // Clear cookies to simulate user with old password
     await context.clearCookies();
+    await signUpTestUser(page, "unlock");
 
     // Try to unlock with old password
     await page.goto(`/boards/${boardId}/unlock`);

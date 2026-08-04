@@ -11,7 +11,7 @@ import {
 } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getBoardPasswordOptional, requireBoardAccess } from "@/lib/secure-board";
+import { canAccessBoard, requireBoardAccess } from "@/lib/secure-board";
 import { getRandomTagColor } from "@/lib/tag-colors";
 import { ensureTagHasHash } from "@/lib/tag-utils";
 import { requireTask, requireTag } from "@/lib/require-resource";
@@ -42,8 +42,7 @@ export async function createTag(
 }
 
 export async function getTags(boardId: string) {
-  const password = await getBoardPasswordOptional(boardId);
-  if (!password) {
+  if (!(await canAccessBoard(boardId))) {
     return [];
   }
 
@@ -151,8 +150,7 @@ export type TagWithStats = {
 };
 
 export async function getTagsWithStats(boardId: string): Promise<TagWithStats[]> {
-  const password = await getBoardPasswordOptional(boardId);
-  if (!password) {
+  if (!(await canAccessBoard(boardId))) {
     return [];
   }
 

@@ -5,6 +5,8 @@ import { boards } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { setBoardPassword } from "@/lib/board-password";
 import { verifyPassword } from "@/lib/password-hash";
+import { requireUser } from "@/lib/auth/session";
+import { addBoardMember } from "@/lib/auth/membership";
 
 export async function unlockBoard(boardId: string, password: string) {
   const board = await db.query.boards.findFirst({
@@ -28,5 +30,11 @@ export async function unlockBoard(boardId: string, password: string) {
   }
 
   await setBoardPassword(boardId, password);
+
+  // Unlocking with the correct password joins the board, so it appears in the
+  // user's sidebar from now on.
+  const user = await requireUser();
+  await addBoardMember(boardId, user.id);
+
   return { success: true };
 }

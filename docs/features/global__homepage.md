@@ -2,7 +2,7 @@
 
 ## Overview
 
-The landing page where users can create new boards and access recently visited boards.
+The landing page where users sign in, create new boards, and access recently visited boards.
 
 ## User Flows
 
@@ -13,6 +13,11 @@ The landing page where users can create new boards and access recently visited b
 - New board created with default columns: "📥 To do", "🔄 Doing", "✅ Done", and "📦 Archive" (collapsed by default)
 - Board title defaults to "{emoji} New board" with a random emoji prefix
 - User automatically redirected to new board (`/boards/{uuid}`)
+
+### Sign In
+
+- Signed-out visitors see `Sign in to create a board`, which links to `/login`
+- Boards require an account, so recent-board links also route through `/login` when signed out
 
 ### Recent Boards
 

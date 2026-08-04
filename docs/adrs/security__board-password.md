@@ -56,6 +56,8 @@ Public links allow sharing a board with password prefilled:
 
 ### Access Helpers (`src/lib/secure-board.ts`)
 
+Board membership is a second, equally strong gate — see [security\_\_user-accounts.md](security__user-accounts.md). `canAccessBoard(boardId)` returns true for a valid password cookie **or** a signed-in member; `requireBoardAccess()` builds on it.
+
 - `getBoardPasswordOptional(boardId)` → returns cookie password only if it verifies against `boards.passwordHash`
 - `requireBoardPassword(boardId)` / `requireBoardAccess(boardId)` → throws if missing/invalid
 - Prefer these helpers in server actions instead of ad-hoc cookie reads to keep behavior consistent.

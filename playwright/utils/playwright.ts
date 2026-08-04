@@ -67,6 +67,31 @@ export async function seedAndNavigateToBoard(
 }
 
 // ============================================================
+// AUTH TEST HELPERS
+// ============================================================
+
+/**
+ * Signs up a fresh account through the UI and lands on the homepage.
+ * Boards require an account, so most flows need this first.
+ */
+export async function signUpTestUser(
+  page: Page,
+  label: string = "user",
+): Promise<{ email: string; password: string }> {
+  const email = `${label}-${crypto.randomUUID()}@example.com`;
+  const password = "supersecret123";
+
+  await page.goto("/signup");
+  await page.getByLabel("Name").fill(`User ${label}`);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: /create account/i }).click();
+  await page.waitForURL("/");
+
+  return { email, password };
+}
+
+// ============================================================
 // UI-BASED TEST HELPERS
 // ============================================================
 
@@ -104,6 +129,12 @@ export async function createTestBoard(
 ): Promise<string> {
   // Navigate to homepage
   await page.goto("/");
+
+  // Creating a board requires an account
+  if (await page.getByRole("link", { name: /sign in to create a board/i }).isVisible()) {
+    await signUpTestUser(page);
+    await page.goto("/");
+  }
 
   // Click "Create a Board" button
   await page.getByRole("button", { name: /create.*board/i }).click();

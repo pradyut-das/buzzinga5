@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useDroppable } from "@dnd-kit/core";
-import { GripVertical, Minimize2, Maximize2, Plus, Trash2 } from "lucide-react";
+import { ChevronsLeftRight, ChevronsRightLeft, GripVertical, Plus, Trash2 } from "lucide-react";
 import { EditableText } from "@/components/editable-text";
 import { TaskCard } from "./task-card";
 import { Button } from "@/components/ui/button";
@@ -198,7 +198,7 @@ export function Column({ id, boardId, name, isCollapsed, tasks }: ColumnProps) {
           className="h-6 w-6 shrink-0 self-center"
           title="Expand column"
         >
-          <Maximize2 className="h-4 w-4" />
+          <ChevronsLeftRight className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
@@ -268,7 +268,7 @@ export function Column({ id, boardId, name, isCollapsed, tasks }: ColumnProps) {
             className="h-6 w-6 shrink-0 text-muted-foreground"
             title="Collapse column"
           >
-            <Minimize2 className="h-4 w-4" />
+            <ChevronsRightLeft className="h-4 w-4" />
           </Button>
         </div>
 

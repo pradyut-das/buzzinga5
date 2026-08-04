@@ -6,11 +6,14 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { setBoardPassword } from "@/lib/board-password";
-import { getBoardPasswordOptional, requireBoardAccess } from "@/lib/secure-board";
+import { canAccessBoard, requireBoardAccess } from "@/lib/secure-board";
+import { requireUser } from "@/lib/auth/session";
+import { addBoardMember } from "@/lib/auth/membership";
 import { hashPassword } from "@/lib/password-hash";
 import { env } from "@/lib/validate-env";
 
 export async function createBoard(title: string, password: string) {
+  const user = await requireUser();
   const id = crypto.randomUUID();
   const passwordHash = hashPassword(password);
 
@@ -18,8 +21,12 @@ export async function createBoard(title: string, password: string) {
     id,
     title,
     passwordHash,
+    ownerId: user.id,
     createdAt: new Date(),
   });
+
+  // The creator owns the board, so it shows up in their sidebar
+  await addBoardMember(id, user.id, "owner");
 
   const defaultColumns = ["📥 To do", "🔄 Doing", "✅ Done"];
   for (let i = 0; i < defaultColumns.length; i++) {
@@ -108,10 +115,9 @@ export async function getBoard(id: string) {
     return null;
   }
 
-  // Password is required
-  const password = await getBoardPasswordOptional(id);
-  if (!password) {
-    // Password not set - board needs to be unlocked
+  // Password cookie or board membership is required
+  if (!(await canAccessBoard(id))) {
+    // Not unlocked and not a member - board needs to be unlocked
     return null;
   }
 

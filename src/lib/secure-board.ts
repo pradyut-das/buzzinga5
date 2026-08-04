@@ -2,6 +2,8 @@ import { db } from "@/db";
 import { boards } from "@/db/schema";
 import { clearBoardPassword, getBoardPassword } from "@/lib/board-password";
 import { verifyPassword } from "@/lib/password-hash";
+import { isBoardMember } from "@/lib/auth/membership";
+import { getCurrentUser } from "@/lib/auth/session";
 import { eq } from "drizzle-orm";
 
 export async function getBoardPasswordOptional(boardId: string): Promise<string | null> {
@@ -36,6 +38,27 @@ export async function requireBoardPassword(boardId: string): Promise<string> {
   return password;
 }
 
+/**
+ * Board access requires a signed-in user, plus either gate:
+ *
+ * - board membership, or
+ * - a valid board password cookie (which then makes the visitor a member)
+ *
+ * Signing in is mandatory: a board password alone no longer grants access.
+ */
+export async function canAccessBoard(boardId: string): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+
+  if (await isBoardMember(boardId, user.id)) return true;
+
+  const password = await getBoardPasswordOptional(boardId);
+  return Boolean(password);
+}
+
 export async function requireBoardAccess(boardId: string): Promise<void> {
-  await requireBoardPassword(boardId);
+  const allowed = await canAccessBoard(boardId);
+  if (!allowed) {
+    throw new Error("Board access denied");
+  }
 }

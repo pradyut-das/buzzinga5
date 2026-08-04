@@ -13,7 +13,7 @@ import {
 } from "@/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getBoardPasswordOptional, requireBoardAccess } from "@/lib/secure-board";
+import { canAccessBoard, requireBoardAccess } from "@/lib/secure-board";
 import { getRandomContributorColor } from "@/lib/contributor-colors";
 import { queueAssignNotification } from "@/lib/notifications";
 import { requireTask, requireContributor } from "@/lib/require-resource";
@@ -41,8 +41,7 @@ export async function createContributor(
 }
 
 export async function getContributors(boardId: string) {
-  const password = await getBoardPasswordOptional(boardId);
-  if (!password) {
+  if (!(await canAccessBoard(boardId))) {
     return [];
   }
 
@@ -249,8 +248,7 @@ export type ContributorWithStats = {
 };
 
 export async function getContributorsWithStats(boardId: string): Promise<ContributorWithStats[]> {
-  const password = await getBoardPasswordOptional(boardId);
-  if (!password) {
+  if (!(await canAccessBoard(boardId))) {
     return [];
   }
 

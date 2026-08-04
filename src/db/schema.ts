@@ -8,13 +8,53 @@ import { relations } from "drizzle-orm";
 export const TASK_PRIORITIES = ["none", "low", "medium", "high", "urgent"] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
+// Users - account holders (see ADR security__user-accounts)
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(), // UUID
+  email: text("email").notNull().unique(),
+  name: text("name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+});
+
+// Sessions - opaque session tokens, stored hashed
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(), // SHA-256 of the session token
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+});
+
 // Boards - identified by UUID
 export const boards = sqliteTable("boards", {
   id: text("id").primaryKey(), // UUID
   title: text("title").notNull().default("New board"),
   passwordHash: text("password_hash").notNull(),
+  // Nullable: boards created before user accounts existed have no owner
+  ownerId: text("owner_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
 });
+
+// Board members - which boards a signed-in user sees in the sidebar
+export const BOARD_MEMBER_ROLES = ["owner", "member"] as const;
+export type BoardMemberRole = (typeof BOARD_MEMBER_ROLES)[number];
+
+export const boardMembers = sqliteTable(
+  "board_members",
+  {
+    boardId: text("board_id")
+      .notNull()
+      .references(() => boards.id, { onDelete: "restrict" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member").$type<BoardMemberRole>(),
+    createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  },
+  (t) => [primaryKey({ columns: [t.boardId, t.userId] })],
+);
 
 // Columns - belong to a board, orderable
 export const columns = sqliteTable("columns", {
@@ -207,7 +247,36 @@ export const sentEmails = sqliteTable("sent_emails", {
 // RELATIONS
 // ============================================================
 
-export const boardsRelations = relations(boards, ({ many }) => ({
+export const usersRelations = relations(users, ({ many }) => ({
+  sessions: many(sessions),
+  ownedBoards: many(boards),
+  memberships: many(boardMembers),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const boardMembersRelations = relations(boardMembers, ({ one }) => ({
+  board: one(boards, {
+    fields: [boardMembers.boardId],
+    references: [boards.id],
+  }),
+  user: one(users, {
+    fields: [boardMembers.userId],
+    references: [users.id],
+  }),
+}));
+
+export const boardsRelations = relations(boards, ({ one, many }) => ({
+  owner: one(users, {
+    fields: [boards.ownerId],
+    references: [users.id],
+  }),
+  members: many(boardMembers),
   columns: many(columns),
   tasks: many(tasks),
   contributors: many(contributors),
@@ -351,6 +420,10 @@ export const pendingNotificationsRelations = relations(pendingNotifications, ({ 
 // TYPE EXPORTS
 // ============================================================
 
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type BoardMember = typeof boardMembers.$inferSelect;
 export type Board = typeof boards.$inferSelect;
 export type NewBoard = typeof boards.$inferInsert;
 export type Column = typeof columns.$inferSelect;

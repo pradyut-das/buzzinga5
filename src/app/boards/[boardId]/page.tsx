@@ -4,7 +4,9 @@ import { getBoard } from "@/actions/boards";
 import { getTask } from "@/actions/tasks";
 import { getContributorsWithStats } from "@/actions/contributors";
 import { getTagsWithStats } from "@/actions/tags";
-import { getBoardPasswordOptional } from "@/lib/secure-board";
+import { canAccessBoard } from "@/lib/secure-board";
+import { getCurrentUser } from "@/lib/auth/session";
+import { addBoardMember } from "@/lib/auth/membership";
 import { BoardHeader } from "@/components/board/board-header";
 import { BoardClient } from "@/components/board/board-client";
 import { TrackBoardVisit } from "@/components/board/track-board-visit";
@@ -69,18 +71,25 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
     notFound();
   }
 
-  // Check password before fetching board data - must happen before any other async operations
-  const password = await getBoardPasswordOptional(boardId);
-  if (!password) {
-    // Password not set - redirect to unlock immediately
+  // Check access before fetching board data - must happen before any other async operations
+  const allowed = await canAccessBoard(boardId);
+  if (!allowed) {
+    // No password cookie and not a member - redirect to unlock immediately
     // This must happen before any other operations to prevent rendering
     redirect(`/boards/${boardId}/unlock`);
   }
 
-  // Now get board with password (we know password is set)
+  // Opening a board you can access while signed in joins it, so it shows up in
+  // the sidebar from now on.
+  const user = await getCurrentUser();
+  if (user) {
+    await addBoardMember(boardId, user.id);
+  }
+
+  // Now get the board (we know the request has access)
   const board = await getBoard(boardId);
 
-  // This should never happen since we checked password above, but keep as safety check
+  // This should never happen since we checked access above, but keep as safety check
   if (!board) {
     redirect(`/boards/${boardId}/unlock`);
   }
