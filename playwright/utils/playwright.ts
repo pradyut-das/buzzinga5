@@ -7,9 +7,13 @@ import { Page, expect, Locator, APIRequestContext } from "@playwright/test";
 interface SeedBoardOptions {
   title?: string;
   password?: string;
+  /** Attaches the board to a client so the desk screens can open it. */
+  client?: string;
   tasks?: Array<{
     title: string;
     columnIndex?: number;
+    /** A category name; the seed creates it on the board the first time it is used. */
+    category?: string;
     assignees?: string[];
     /** Offset from base time in seconds (for deterministic ordering in tests) */
     createdAtOffset?: number;
@@ -22,6 +26,7 @@ interface SeedBoardOptions {
 
 interface SeedBoardResult {
   boardId: string;
+  clientId: string | null;
   columnIds: string[];
   taskIds: string[];
   contributorIds: Record<string, string>;
@@ -40,6 +45,7 @@ export async function seedTestBoard(
     data: {
       title: options.title ?? "Test Board",
       password: options.password ?? "testpass123",
+      client: options.client,
       tasks: options.tasks,
       contributors: options.contributors,
     },

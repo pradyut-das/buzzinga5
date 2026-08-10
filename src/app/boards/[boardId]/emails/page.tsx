@@ -59,7 +59,9 @@ export default function BoardEmailsPage({ params }: PageProps) {
   const handleProcessNotifications = async () => {
     setProcessing(true);
     try {
-      const response = await fetch(`/api/boards/${boardId}/emails`, { method: "POST" });
+      const response = await fetch(`/api/boards/${boardId}/emails`, {
+        method: "POST",
+      });
       const data = await response.json();
       console.log("Processed notifications:", data);
       await fetchEmails();
@@ -72,7 +74,7 @@ export default function BoardEmailsPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen gradient-holographic p-8">
+      <div className="app-canvas min-h-screen p-8">
         <div className="mx-auto max-w-4xl">
           <div className="glass glass-strong border border-border/50 p-8 text-center">
             <p className="text-muted-foreground">Loading...</p>
@@ -88,7 +90,7 @@ export default function BoardEmailsPage({ params }: PageProps) {
   }
 
   return (
-    <div className="min-h-screen gradient-holographic p-8">
+    <div className="app-canvas min-h-screen p-8">
       <div className="mx-auto max-w-4xl">
         <div className="glass glass-strong border border-border/50 p-8">
           {/* Header */}

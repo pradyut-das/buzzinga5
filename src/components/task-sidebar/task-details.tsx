@@ -195,31 +195,6 @@ export function TaskDetails({ task, columns, contributors, tags, onClose }: Task
         columns={columns}
       />
 
-      {/* Priority */}
-      <div className="space-y-2">
-        <label htmlFor="priority-select" className="text-label">
-          Priority
-        </label>
-        <Select value={task.priority} onValueChange={handlePriorityChange}>
-          <SelectTrigger id="priority-select" className="w-full" aria-label="Priority">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {TASK_PRIORITY_OPTIONS.map((opt) => {
-              const { Icon, iconClassName } = TASK_PRIORITY_META[opt.value];
-              return (
-                <SelectItem key={opt.value} value={opt.value}>
-                  <span className="flex items-center gap-2">
-                    <Icon className={cn("h-4 w-4", iconClassName)} />
-                    <span>{opt.label}</span>
-                  </span>
-                </SelectItem>
-              );
-            })}
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Assignees */}
       <AssigneesSelect
         taskId={task.id}
@@ -228,48 +203,78 @@ export function TaskDetails({ task, columns, contributors, tags, onClose }: Task
         contributors={contributors}
       />
 
-      {/* Stakeholders */}
-      <StakeholdersSelect
-        taskId={task.id}
-        boardId={task.boardId}
-        stakeholders={task.stakeholders ?? []}
-        contributors={contributors}
-      />
+      <details className="task-advanced rounded-xl border border-border/60">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">More details</summary>
+        <div className="flex flex-col gap-5 border-t border-border/60 p-4">
+          <div className="space-y-2">
+            <label htmlFor="priority-select" className="text-label">
+              Priority
+            </label>
+            <Select value={task.priority} onValueChange={handlePriorityChange}>
+              <SelectTrigger id="priority-select" className="w-full" aria-label="Priority">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_PRIORITY_OPTIONS.map((opt) => {
+                  const { Icon, iconClassName } = TASK_PRIORITY_META[opt.value];
+                  return (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      <span className="flex items-center gap-2">
+                        <Icon className={cn("h-4 w-4", iconClassName)} />
+                        <span>{opt.label}</span>
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
 
-      {/* Tags */}
-      <TagsSelect taskId={task.id} boardId={task.boardId} tags={task.tags ?? []} allTags={tags} />
+          <StakeholdersSelect
+            taskId={task.id}
+            boardId={task.boardId}
+            stakeholders={task.stakeholders ?? []}
+            contributors={contributors}
+          />
 
-      {/* Created At */}
-      <div className="space-y-2">
-        <span className="text-label">Created at</span>
-        <DatePicker
-          date={task.createdAt ?? undefined}
-          onDateChange={handleCreatedAtChange}
-          placeholder="Select date"
-        />
-      </div>
+          <TagsSelect
+            taskId={task.id}
+            boardId={task.boardId}
+            tags={task.tags ?? []}
+            allTags={tags}
+          />
 
-      {/* Action buttons */}
-      <div className="mt-auto flex justify-end gap-2 pt-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleSendToLinear}
-          className="h-8 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground"
-        >
-          <LinearIcon className="h-4 w-4" />
-          <span>Send to Linear</span>
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsDeleteDialogOpen(true)}
-          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-          title="Delete task"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
+          <div className="space-y-2">
+            <span className="text-label">Created at</span>
+            <DatePicker
+              date={task.createdAt ?? undefined}
+              onDateChange={handleCreatedAtChange}
+              placeholder="Select date"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSendToLinear}
+              className="h-8 gap-1.5 px-2.5 text-muted-foreground hover:text-foreground"
+            >
+              <LinearIcon className="h-4 w-4" />
+              <span>Send to Linear</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              title="Delete task"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </details>
 
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>

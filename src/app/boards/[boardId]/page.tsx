@@ -47,11 +47,11 @@ export async function generateMetadata({
   const board = await getBoard(boardId);
   if (!board) {
     // Board exists but password not set - return generic title
-    return { title: "Board Locked | Itacorubi Kanban" };
+    return { title: "Board Locked | Squirrl" };
   }
 
   return {
-    title: `${board.title} | Itacorubi Kanban`,
+    title: `${board.title} | Squirrl`,
   };
 }
 
@@ -112,10 +112,7 @@ export default async function BoardPage({ params, searchParams }: BoardPageProps
   const taskData = task as TaskWithComments | null;
 
   return (
-    <div
-      data-testid="board-page"
-      className="flex h-screen flex-col overflow-hidden gradient-holographic"
-    >
+    <div data-testid="board-page" className="app-canvas flex h-screen flex-col overflow-hidden">
       <HydrateBoard boardId={board.id} boardData={boardData} taskData={taskData} />
       <OutboxGuard boardId={board.id} />
       <TrackBoardVisit boardId={board.id} title={board.title} />

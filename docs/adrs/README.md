@@ -13,7 +13,6 @@ Use format: `{prefix}__{name}.md`
 | `ui__`       | Components, UX patterns           |
 | `security__` | Auth, passwords, headers          |
 | `testing__`  | Playwright, linting, code quality |
-| `files__`    | File uploads, storage             |
 | `global__`   | Cross-cutting concerns            |
 
 ## Format

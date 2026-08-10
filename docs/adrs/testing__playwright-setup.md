@@ -129,7 +129,6 @@ Avoid (8+ separate tests):
 
 Some scenarios cannot be reliably tested with Playwright's synthetic events:
 
-- **Drag-and-drop file uploads** - Synthetic drop events don't trigger ProseMirror/Tiptap's event handlers reliably. The toolbar upload button is tested instead.
 - **Complex editor interactions** - Some rich text editor behaviors require real browser events that can't be synthesized.
 
 These are documented here rather than kept as skipped tests.

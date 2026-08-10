@@ -14,7 +14,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export function RecentBoards() {
+/**
+ * `onOpen` lets a host — the creator console — intercept the click and show the
+ * board in a dialog instead of navigating. Without it the entries stay links,
+ * which is what the signed-out homepage wants.
+ */
+export function RecentBoards({ onOpen }: { onOpen?: (boardId: string) => void } = {}) {
   const { boards, forget } = useVisitedBoards();
   const [boardToForget, setBoardToForget] = useState<VisitedBoard | null>(null);
 
@@ -41,6 +46,14 @@ export function RecentBoards() {
               <Link
                 href={`/boards/${board.id}`}
                 className="flex items-center justify-between rounded-lg px-3 py-2 transition-colors hover:bg-white/60 dark:hover:bg-white/10"
+                onClick={
+                  onOpen
+                    ? (event) => {
+                        event.preventDefault();
+                        onOpen(board.id);
+                      }
+                    : undefined
+                }
               >
                 <span className="text-heading-sm text-foreground">{board.title}</span>
                 <code className="text-xs text-muted-foreground/80 transition-opacity group-hover:opacity-0">

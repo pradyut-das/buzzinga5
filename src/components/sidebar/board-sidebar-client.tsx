@@ -57,7 +57,7 @@ export function BoardSidebarClient({ user, boards }: BoardSidebarClientProps) {
       <div className="flex items-center gap-2 px-2 py-3">
         {!isCollapsed && (
           <Link href="/" className="px-2 text-heading-sm truncate">
-            Itacorubi
+            Squirrl
           </Link>
         )}
         <Button

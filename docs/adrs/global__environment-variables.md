@@ -23,15 +23,31 @@ Hardcode non-secret values in the codebase. Only use environment variables for a
 
 These are validated at build time using Zod in `src/lib/validate-env.ts`. Builds fail with clear errors if missing in production.
 
-| Variable                | Format            | Purpose                      |
-| ----------------------- | ----------------- | ---------------------------- |
-| `TURSO_DATABASE_URL`    | URL               | Turso database connection    |
-| `TURSO_AUTH_TOKEN`      | Non-empty         | Turso authentication         |
-| `CRON_SECRET`           | Min 16 chars      | Cron endpoint authentication |
-| `RESEND_API_KEY`        | Starts with `re_` | Email sending via Resend     |
-| `BLOB_READ_WRITE_TOKEN` | Non-empty         | Vercel Blob file storage     |
+| Variable             | Format       | Purpose                      |
+| -------------------- | ------------ | ---------------------------- |
+| `TURSO_DATABASE_URL` | URL          | Turso database connection    |
+| `TURSO_AUTH_TOKEN`   | Non-empty    | Turso authentication         |
+| `CRON_SECRET`        | Min 16 chars | Cron endpoint authentication |
 
 These are injected automatically by Vercel/Turso marketplace integration.
+
+## Optional ENV Variables
+
+| Variable            | Format       | Purpose                                                                                                            |
+| ------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `GEMINI_API_KEY`    | Non-empty    | Creator-desk voice agent and chatbot. Without it the desk renders and polls, but both agent surfaces are disabled. |
+| `GEMINI_LIVE_MODEL` | Model id     | Overrides the Live audio model                                                                                     |
+| `GEMINI_CHAT_MODEL` | Model id     | Overrides the text chat model                                                                                      |
+| `GEMINI_LIVE_VOICE` | Voice name   | Overrides the spoken voice (default `Zephyr`)                                                                      |
+| `ADMIN_EMAILS`      | Comma list   | Emails allowed into `/admin`. Unset or empty means nobody is an admin and the console 404s.                        |
+| `RESEND_API_KEY`    | Starts `re_` | Sends notification email externally. Without it, digests remain available in email history but are not delivered.  |
+| `WHATSAPP_API_URL`  | URL          | Enables WhatsApp community synchronization.                                                                        |
+| `WHATSAPP_API_KEY`  | Non-empty    | Authenticates the optional WhatsApp provider.                                                                      |
+| `INSTAGRAM_API_URL` | URL          | Enables Instagram topic synchronization.                                                                           |
+| `INSTAGRAM_API_KEY` | Non-empty    | Authenticates the optional Instagram provider.                                                                     |
+
+The key stays server-side. The browser receives only a single-use ephemeral Live token minted by
+`/api/agent/session` — see `agent__tool-registry`.
 
 ## Examples
 
@@ -47,7 +63,7 @@ function getBaseUrl(): string {
 }
 
 // ✅ Hardcoded fallback for local dev (not a secret)
-url: process.env.TURSO_DATABASE_URL ?? "file:local.db"
+url: process.env.TURSO_DATABASE_URL ?? "file:local.db";
 
 // ❌ Don't use ENV for non-secrets
 const domain = process.env.NEXT_PUBLIC_BASE_URL; // Avoid this
@@ -100,3 +116,4 @@ The `node/no-process-env` rule prevents direct `process.env` usage, enforcing th
 - `next.config.ts` - Loaded before validation runs
 - `drizzle.config.ts` - Used by CLI, not app runtime
 - `playwright/**/*.ts` - Test configuration
+- `scripts/**/*.ts` - One-off CLI scripts that validate their own required inputs

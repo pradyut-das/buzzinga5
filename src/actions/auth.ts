@@ -1,15 +1,15 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
 import { z } from "zod";
-import { db } from "@/db";
-import { users } from "@/db/schema";
-import { hashPassword, verifyPassword } from "@/lib/password-hash";
-import { createSession, destroySession, getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 
 export interface AuthResult {
   success: boolean;
   error?: string;
+  /** Set when the user must confirm an emailed link before they are signed in. */
+  emailSent?: boolean;
 }
 
 const signUpSchema = z.object({
@@ -23,31 +23,49 @@ const signInSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+const magicLinkSchema = z.object({
+  email: z.email({ message: "Enter a valid email" }).transform((value) => value.toLowerCase()),
+});
+
+/** Absolute origin for redirect URLs. Supabase rejects relative ones. */
+async function getOrigin(): Promise<string> {
+  const headerList = await headers();
+  const host = headerList.get("x-forwarded-host") ?? headerList.get("host");
+  const protocol = headerList.get("x-forwarded-proto") ?? "http";
+  return `${protocol}://${host}`;
+}
+
+function callbackUrl(origin: string, redirectTo: string): string {
+  // Only same-site paths, so a crafted `next` cannot bounce users off-site.
+  const safe = redirectTo.startsWith("/") ? redirectTo : "/";
+  return `${origin}/auth/callback?next=${encodeURIComponent(safe)}`;
+}
+
 export async function signUp(name: string, email: string, password: string): Promise<AuthResult> {
   const parsed = signUpSchema.safeParse({ name, email, password });
   if (!parsed.success) {
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const existing = await db.query.users.findFirst({
-    where: eq(users.email, parsed.data.email),
-    columns: { id: true },
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signUp({
+    email: parsed.data.email,
+    password: parsed.data.password,
+    options: {
+      data: { name: parsed.data.name },
+      emailRedirectTo: callbackUrl(await getOrigin(), "/"),
+    },
   });
 
-  if (existing) {
-    return { success: false, error: "An account with this email already exists" };
+  if (error) {
+    return { success: false, error: error.message };
   }
 
-  const id = crypto.randomUUID();
-  await db.insert(users).values({
-    id,
-    name: parsed.data.name,
-    email: parsed.data.email,
-    passwordHash: hashPassword(parsed.data.password),
-    createdAt: new Date(),
-  });
+  // With email confirmation on, Supabase returns a user but no session.
+  if (!data.session) {
+    return { success: true, emailSent: true };
+  }
 
-  await createSession(id);
   return { success: true };
 }
 
@@ -57,23 +75,46 @@ export async function signIn(email: string, password: string): Promise<AuthResul
     return { success: false, error: parsed.error.issues[0].message };
   }
 
-  const user = await db.query.users.findFirst({
-    where: eq(users.email, parsed.data.email),
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword({
+    email: parsed.data.email,
+    password: parsed.data.password,
   });
 
-  // Generic message so the form does not reveal which emails have accounts
-  const genericError = "Invalid email or password";
-
-  if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
-    return { success: false, error: genericError };
+  if (error) {
+    // Generic message so the form does not reveal which emails have accounts.
+    return { success: false, error: "Invalid email or password" };
   }
 
-  await createSession(user.id);
   return { success: true };
 }
 
+/** Sends a passwordless sign-in link. Also creates the account if it is new. */
+export async function signInWithMagicLink(
+  email: string,
+  redirectTo: string = "/",
+): Promise<AuthResult> {
+  const parsed = magicLinkSchema.safeParse({ email });
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0].message };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithOtp({
+    email: parsed.data.email,
+    options: { emailRedirectTo: callbackUrl(await getOrigin(), redirectTo) },
+  });
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, emailSent: true };
+}
+
 export async function signOut(): Promise<void> {
-  await destroySession();
+  const supabase = await createClient();
+  await supabase.auth.signOut();
 }
 
 export async function getSessionUser() {

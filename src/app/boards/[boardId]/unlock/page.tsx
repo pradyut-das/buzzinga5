@@ -41,7 +41,7 @@ export default async function UnlockPage({ params, searchParams }: UnlockPagePro
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center gradient-holographic p-6">
+    <div className="app-canvas flex min-h-screen items-center justify-center p-6">
       <div className="glass glass-strong w-full max-w-md rounded-lg p-8">
         <h1 className="mb-2 text-2xl font-semibold">Board Locked</h1>
         <p className="mb-6 text-muted-foreground">Enter the password to access this board</p>

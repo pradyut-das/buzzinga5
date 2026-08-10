@@ -4,12 +4,13 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { MessageSquare, UserRoundX } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import { ContributorBadge } from "@/components/contributor-badge";
 import { TagBadge } from "@/components/tag-badge";
 import { cn } from "@/lib/utils";
 import type { ContributorColor, TaskPriority } from "@/db/schema";
 import { TASK_PRIORITY_META } from "@/lib/task-priority";
+import { useBoardHost } from "@/components/board/board-host";
 import { useBoardStore } from "@/stores/board-store";
 
 interface TaskCardProps {
@@ -94,6 +95,7 @@ export function TaskCard({
   createdAt,
 }: TaskCardProps) {
   const router = useRouter();
+  const { embedded } = useBoardHost();
   const displayTags = tags ?? [];
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -103,6 +105,9 @@ export function TaskCard({
   const openTask = () => {
     // Set pending open task for instant sidebar (bypasses router delay)
     useBoardStore.getState().setPendingOpenTask({ boardId, taskId: id });
+    // Embedded, the board is a panel on another route: navigating to the task
+    // URL would leave that page, so the store opens the sidebar on its own.
+    if (embedded) return;
     // Navigate to the task
     const newUrl = `/boards/${boardId}?task=${id}`;
     window.history.pushState(window.history.state, "", newUrl);
@@ -140,6 +145,7 @@ export function TaskCard({
       : null;
 
   const { cardClassName, Icon: PriorityIcon, iconClassName } = TASK_PRIORITY_META[priority];
+  const showMeta = priority !== "none" || commentCount > 0 || (daysSinceCreated ?? 0) > 0;
 
   return (
     <div
@@ -162,24 +168,30 @@ export function TaskCard({
       <h4 className="text-heading-sm text-foreground leading-snug">{title}</h4>
 
       {/* Priority + comments + age meta row */}
-      <div className="mt-1.5 flex items-center gap-2">
-        <PriorityIcon className={cn("h-3 w-3 shrink-0", iconClassName)} />
+      {showMeta ? (
+        <div className="mt-1.5 flex items-center gap-2">
+          {priority !== "none" ? (
+            <PriorityIcon className={cn("h-3 w-3 shrink-0", iconClassName)} />
+          ) : null}
 
-        <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-          <MessageSquare className="h-3 w-3 shrink-0" />
-          <span className="shrink-0">{commentCount}</span>
+          {commentCount > 0 ? (
+            <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+              <MessageSquare className="h-3 w-3 shrink-0" />
+              <span className="shrink-0">{commentCount}</span>
+            </div>
+          ) : null}
+
+          {taskAgeText && daysSinceCreated !== null && daysSinceCreated > 0 && (
+            <span className={cn("truncate text-xs", taskAgeStyles.color, taskAgeStyles.weight)}>
+              · {taskAgeText}
+            </span>
+          )}
         </div>
-
-        {taskAgeText && (
-          <span className={cn("truncate text-xs", taskAgeStyles.color, taskAgeStyles.weight)}>
-            · {taskAgeText}
-          </span>
-        )}
-      </div>
+      ) : null}
 
       {/* Assignees row */}
-      <div className="mt-1.5 flex items-start justify-end">
-        {assignees.length > 0 ? (
+      {assignees.length > 0 ? (
+        <div className="mt-1.5 flex items-start justify-end">
           <div className="flex flex-wrap justify-end gap-1">
             {assignees.map((assignee) => (
               <ContributorBadge
@@ -190,12 +202,8 @@ export function TaskCard({
               />
             ))}
           </div>
-        ) : (
-          <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-muted-foreground/40 px-2 py-0.5 text-xs text-muted-foreground">
-            <UserRoundX className="h-3 w-3" />
-          </span>
-        )}
-      </div>
+        </div>
+      ) : null}
 
       {/* Tags row */}
       {displayTags.length > 0 && (

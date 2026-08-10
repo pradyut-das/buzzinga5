@@ -1,105 +1,102 @@
-import { createHash, randomBytes } from "crypto";
 import { cache } from "react";
-import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { sessions, users, type User } from "@/db/schema";
-import { env } from "@/lib/validate-env";
-
-const SESSION_COOKIE = "session";
-const SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
-// Refresh the session row + cookie when less than a third of its life is left.
-const SESSION_REFRESH_THRESHOLD_MS = SESSION_DURATION_MS / 3;
+import { approvals, boardMembers, boards, users, type User } from "@/db/schema";
+import { createClient } from "@/lib/supabase/server";
 
 export type SessionUser = Pick<User, "id" | "email" | "name">;
 
-/** Sessions are stored hashed so a leaked DB row cannot be replayed as a cookie. */
-function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
-}
-
-function cookieOptions(expiresAt: Date) {
-  return {
-    httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
-    expires: expiresAt,
-    path: "/",
-  } as const;
-}
-
-/** Creates a session row and sets the session cookie. */
-export async function createSession(userId: string): Promise<void> {
-  const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
-
-  await db.insert(sessions).values({
-    id: hashToken(token),
-    userId,
-    expiresAt,
-    createdAt: new Date(),
+/**
+ * Supabase Auth owns identity and sessions. The local `users` table is a
+ * mirror, keyed by the Supabase user id, because `boards.ownerId`,
+ * `boardMembers.userId` and `approvals.decidedById` all foreign-key to it.
+ *
+ * The row is created on first sight rather than by a signup hook, so a user
+ * created directly in the Supabase dashboard still works on their first visit.
+ */
+async function mirrorUser(id: string, email: string, name: string): Promise<SessionUser> {
+  const existing = await db.query.users.findFirst({
+    where: eq(users.id, id),
+    columns: { id: true, email: true, name: true },
   });
 
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE, token, cookieOptions(expiresAt));
-}
-
-/** Deletes the current session row and clears the cookie. */
-export async function destroySession(): Promise<void> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
-
-  if (token) {
-    await db.delete(sessions).where(eq(sessions.id, hashToken(token)));
+  if (existing) {
+    // Keep the mirror in step when the user changes their email or name in
+    // Supabase. Comparing first keeps the common path read-only.
+    if (existing.email !== email || existing.name !== name) {
+      await db.update(users).set({ email, name }).where(eq(users.id, id));
+      return { id, email, name };
+    }
+    return existing;
   }
 
-  cookieStore.delete(SESSION_COOKIE);
+  // No row under the Supabase id, but the email may already be taken by an
+  // account from before the Supabase switch. Adopt it — inserting would fail
+  // the unique email constraint, and a new row would strand that person's
+  // boards and memberships under their retired id.
+  const byEmail = await db.query.users.findFirst({
+    where: eq(users.email, email),
+    columns: { id: true },
+  });
+
+  if (byEmail) {
+    await adoptLegacyUser(byEmail.id, id, email, name);
+    return { id, email, name };
+  }
+
+  await db.insert(users).values({ id, email, name, createdAt: new Date() });
+  return { id, email, name };
+}
+
+/**
+ * Re-keys a pre-Supabase account onto its Supabase id, carrying its boards and
+ * memberships across.
+ *
+ * Batched so it cannot half-apply: a crash midway would leave the user's
+ * boards pointing at an id that no longer exists.
+ *
+ * The order is forced by two constraints pulling opposite ways. `email` is
+ * unique, so the old row must release it before the new row can take it; but
+ * the references can only move once the new row exists. Parking the old email
+ * behind a throwaway value satisfies both.
+ */
+async function adoptLegacyUser(
+  oldId: string,
+  newId: string,
+  email: string,
+  name: string,
+): Promise<void> {
+  await db.batch([
+    db
+      .update(users)
+      .set({ email: `migrated-${oldId}@invalid` })
+      .where(eq(users.id, oldId)),
+    db.insert(users).values({ id: newId, email, name, createdAt: new Date() }),
+    db.update(boardMembers).set({ userId: newId }).where(eq(boardMembers.userId, oldId)),
+    db.update(boards).set({ ownerId: newId }).where(eq(boards.ownerId, oldId)),
+    db.update(approvals).set({ decidedById: newId }).where(eq(approvals.decidedById, oldId)),
+    db.delete(users).where(eq(users.id, oldId)),
+  ]);
 }
 
 /**
  * Returns the signed-in user, or null.
  *
  * Cached per request so layout, page and actions share a single lookup.
- * Expired sessions are deleted lazily on read.
+ * Uses `getUser()`, not `getSession()`: only `getUser()` revalidates the token
+ * against Supabase, so a forged cookie cannot fake a session.
  */
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const sessionId = hashToken(token);
-  const session = await db.query.sessions.findFirst({
-    where: eq(sessions.id, sessionId),
-  });
+  if (!user?.email) return null;
 
-  if (!session) return null;
+  const name = (user.user_metadata?.name as string | undefined)?.trim() || user.email.split("@")[0];
 
-  if (session.expiresAt.getTime() <= Date.now()) {
-    await db.delete(sessions).where(eq(sessions.id, sessionId));
-    return null;
-  }
-
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, session.userId),
-    columns: { id: true, email: true, name: true },
-  });
-
-  if (!user) return null;
-
-  // Sliding expiration. Writing the cookie can fail in a Server Component
-  // render (cookies are read-only there), which is fine — the next action or
-  // route handler will extend it.
-  if (session.expiresAt.getTime() - Date.now() < SESSION_REFRESH_THRESHOLD_MS) {
-    const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
-    await db.update(sessions).set({ expiresAt }).where(eq(sessions.id, sessionId));
-    try {
-      cookieStore.set(SESSION_COOKIE, token, cookieOptions(expiresAt));
-    } catch {
-      // Read-only cookie store during render — ignore.
-    }
-  }
-
-  return user;
+  return mirrorUser(user.id, user.email.toLowerCase(), name);
 });
 
 /** Returns the signed-in user or throws. Use in actions that require an account. */

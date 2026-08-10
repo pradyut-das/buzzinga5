@@ -39,6 +39,7 @@
       "files": [
         "src/lib/validate-env.ts",
         "src/app/api/test/**/*.ts",
+        "scripts/**/*.ts",
         "next.config.ts",
         "drizzle.config.ts",
         "playwright/**/*.ts"

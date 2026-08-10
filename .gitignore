@@ -51,5 +51,11 @@ next-env.d.ts
 *.db
 *.db-journal
 
+# one-off local account migration backup
+backup-users-rekey.json
+
+# local visual QA captures and prototypes
+screens/
+
 # local file uploads (development)
 /public/uploads/

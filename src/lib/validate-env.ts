@@ -47,25 +47,58 @@ const serverEnvSchema = z.object({
       message: "CRON_SECRET is required in production for cron job authentication",
     }),
 
-  // Email (Resend) - Required in production for notifications
+  // Email delivery is optional. Without Resend, notification digests are still
+  // rendered and saved to email history; they are simply not sent externally.
   RESEND_API_KEY: z
     .string()
     .refine((val) => !val || val.startsWith("re_"), {
       message: "RESEND_API_KEY must start with 're_'",
     })
+    .optional(),
+
+  // Gemini (creator homepage agent) - optional; without it the dashboard still
+  // renders and only the voice agent and chatbot are turned off.
+  GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY cannot be empty").optional(),
+  GEMINI_LIVE_MODEL: z.string().optional(),
+  GEMINI_CHAT_MODEL: z.string().optional(),
+  GEMINI_LIVE_VOICE: z.string().optional(),
+
+  // Optional third-party research providers. A missing endpoint leaves the
+  // related sync disabled instead of blocking the rest of the desk.
+  WHATSAPP_API_URL: z.url().optional(),
+  WHATSAPP_API_KEY: z.string().optional(),
+  INSTAGRAM_API_URL: z.url().optional(),
+  INSTAGRAM_API_KEY: z.string().optional(),
+
+  // Supabase Auth - owns identity and sessions. The URL and anon key are
+  // public by design (they ship to the browser); the service key must never
+  // leave the server and is what lets /admin create and delete accounts.
+  NEXT_PUBLIC_SUPABASE_URL: z
+    .url({ message: "NEXT_PUBLIC_SUPABASE_URL must be a valid URL" })
     .optional()
     .refine((val) => !isVercelProduction || (val && val.length > 0), {
-      message: "RESEND_API_KEY is required in production for email notifications",
+      message: "NEXT_PUBLIC_SUPABASE_URL is required in production for authentication",
     }),
 
-  // File storage (Vercel Blob) - Required in production for file uploads
-  BLOB_READ_WRITE_TOKEN: z
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: z
     .string()
-    .min(1, "BLOB_READ_WRITE_TOKEN cannot be empty")
+    .min(1, "NEXT_PUBLIC_SUPABASE_ANON_KEY cannot be empty")
     .optional()
     .refine((val) => !isVercelProduction || (val && val.length > 0), {
-      message: "BLOB_READ_WRITE_TOKEN is required in production for file uploads",
+      message: "NEXT_PUBLIC_SUPABASE_ANON_KEY is required in production for authentication",
     }),
+
+  SUPABASE_SERVICE_KEY: z
+    .string()
+    .min(1, "SUPABASE_SERVICE_KEY cannot be empty")
+    .optional()
+    .refine((val) => !isVercelProduction || (val && val.length > 0), {
+      message: "SUPABASE_SERVICE_KEY is required in production for admin user management",
+    }),
+
+  // Admin console allowlist - comma-separated emails. Anyone signed in with a
+  // listed email reaches /admin; empty or unset turns the console off entirely.
+  ADMIN_EMAILS: z.string().optional(),
 
   // Vercel-provided variables (automatically set by Vercel)
   VERCEL_URL: z.string().optional(),

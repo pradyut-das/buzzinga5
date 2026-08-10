@@ -6,3 +6,67 @@
 @import "./typography.css";
 @import "./glassmorphism.css";
 @import "./tiptap.css";
+@import "./creator-desk.css";
+
+@layer base {
+  html {
+    background: var(--background);
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    min-height: 100dvh;
+    font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    letter-spacing: -0.01em;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    color: white;
+    background: #0071e3;
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      scroll-behavior: auto !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .board-column {
+    border-color: rgb(0 0 0 / 8%);
+    background: rgb(255 255 255 / 58%);
+    box-shadow: 0 8px 28px rgb(0 0 0 / 5%);
+  }
+
+  .dark .board-column {
+    border-color: rgb(255 255 255 / 10%);
+    background: rgb(28 28 30 / 68%);
+  }
+
+  .board-column-header {
+    min-height: 3rem;
+    background: rgb(255 255 255 / 32%);
+  }
+
+  .dark .board-column-header {
+    background: rgb(255 255 255 / 3%);
+  }
+}

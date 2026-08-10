@@ -1,5 +1,14 @@
 # ADR 005: Typography Utilities
 
+## One typeface
+
+The product ships **Inter and nothing else**. It is loaded once in
+`src/app/layout.tsx` as `--font-inter`; `--font-sans`, `--font-mono` (theme.css)
+and `--sans`, `--mono` (desk-v2.css) all resolve to it. The "mono" tokens are
+kept so the label rules that use them — uppercase, tracked-out eyebrows — keep
+working, but they no longer switch family. Weight, size and letter-spacing carry
+hierarchy; a second family does not.
+
 Use a small set of utility classes in `src/styles/typography.css` (imported through `src/styles/globals.css`) to keep text consistent without adding wrapper components.
 
 - Semantic class names (`text-body`, `text-muted`, `text-heading`, etc.) map to lightweight Tailwind applies

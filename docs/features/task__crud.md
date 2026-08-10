@@ -27,10 +27,12 @@ Tasks are the individual work items that live within columns. Each task can have
 - Open task sidebar (click on task card)
 - Editable fields (right panel):
   - **Title**: Click to edit, auto-saves after 1 second or on Enter/blur
-  - **Priority**: Dropdown (No priority, Low, Medium, High, Urgent). Defaults to **No priority**
   - **Status**: Dropdown to move between columns
   - **Assignees**: Multi-select with ability to create new contributors
+  - **More details**: Expand to reveal less-frequent controls
+  - **Priority**: Dropdown (No priority, Low, Medium, High, Urgent). Defaults to **No priority**
   - **Stakeholders**: Multi-select with ability to create new contributors (reuses same contributor list)
+  - **Tags**: Multi-select for board tags
   - **Created at**: Date picker to view/change creation date
 
 ### Move Task (Drag & Drop)

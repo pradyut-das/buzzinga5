@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Sign Up | Itacorubi Kanban",
+  title: "Sign Up | Squirrl",
 };
 
 interface SignupPageProps {
@@ -23,7 +23,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center gradient-holographic px-6 py-12">
+    <div className="app-canvas flex min-h-screen items-center justify-center px-6 py-12">
       <div className="w-full max-w-sm glass glass-strong border border-border/50 px-6 py-8 shadow-2xl">
         <h1 className="text-heading-lg mb-1">Create your account</h1>
         <p className="mb-6 text-sm text-muted-foreground">

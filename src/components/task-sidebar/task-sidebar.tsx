@@ -11,6 +11,7 @@ import { SyncIndicator } from "@/components/sync-indicator";
 import { Button } from "@/components/ui/button";
 import type { ContributorColor } from "@/db/schema";
 import { ChevronLeft, Loader2 } from "lucide-react";
+import { useBoardHost } from "@/components/board/board-host";
 import { selectBoard, selectTaskDetails, useBoardStore } from "@/stores/board-store";
 import { flushBoardOutbox } from "@/lib/outbox/flush";
 
@@ -38,6 +39,7 @@ const MAX_COMMENT_REFETCH_ATTEMPTS = 3;
 
 export function TaskSidebar({ taskId, boardId, columns, contributors, tags }: TaskSidebarProps) {
   const router = useRouter();
+  const { embedded } = useBoardHost();
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(true);
   const [commentRefetchAttempts, setCommentRefetchAttempts] = useState(0);
@@ -316,9 +318,9 @@ export function TaskSidebar({ taskId, boardId, columns, contributors, tags }: Ta
     setIsOpen(false);
     // Clear pending task to ensure clean state for reopening
     useBoardStore.getState().setPendingOpenTask(null);
-    // Update URL
-    router.replace(`/boards/${boardId}`);
-  }, [router, boardId]);
+    // Embedded there is no task URL to undo — see BoardHostContext.
+    if (!embedded) router.replace(`/boards/${boardId}`);
+  }, [router, boardId, embedded]);
 
   // Hydrate server task into local store when it arrives
   useEffect(() => {

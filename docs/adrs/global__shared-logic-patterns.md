@@ -101,4 +101,3 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
 - `src/lib/process-board-notifications.ts` — shared notification processing for cron + manual trigger
 - `src/lib/notifications.ts` — notification queueing helpers used by multiple actions
-- `src/lib/storage/index.ts` — file upload/delete operations

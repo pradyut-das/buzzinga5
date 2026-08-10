@@ -5,106 +5,50 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1765667701194,
-      "tag": "0000_baseline",
+      "when": 1785865074405,
+      "tag": "0000_v2_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "6",
-      "when": 1765667928454,
-      "tag": "0001_add-password-hash",
+      "when": 1785865909080,
+      "tag": "0001_client_contact",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "6",
-      "when": 1765733025186,
-      "tag": "0002_add-task-priority",
+      "when": 1785869620690,
+      "tag": "0002_asset_slides",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
-      "when": 1765750651000,
-      "tag": "0003_add-task-stakeholders",
+      "when": 1785906019418,
+      "tag": "0003_task_types",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "6",
-      "when": 1765809218000,
-      "tag": "0004_fix-task-stakeholders",
+      "when": 1786011006366,
+      "tag": "0004_add-task-due-at",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "6",
-      "when": 1765812000000,
-      "tag": "0005_ensure-task-stakeholders",
+      "when": 1786076777787,
+      "tag": "0005_drop-task-types-and-uploads",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "6",
-      "when": 1766000000000,
-      "tag": "0006_add-tags",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1766100000000,
-      "tag": "0007_add-uploaded-files",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1766200000000,
-      "tag": "0008_remove-uploaded-files-comment-fk",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1766300000000,
-      "tag": "0009_add-contributor-email",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "6",
-      "when": 1766400000000,
-      "tag": "0010_add-notification-queue",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "6",
-      "when": 1766500000000,
-      "tag": "0011_add-sent-emails",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "6",
-      "when": 1766600000000,
-      "tag": "0012_add-sent-emails-from",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "6",
-      "when": 1785831576871,
-      "tag": "0013_add-user-accounts",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "6",
-      "when": 1785831577871,
-      "tag": "0014_drop-general-board",
+      "when": 1786363349775,
+      "tag": "0006_supabase-auth",
       "breakpoints": true
     }
   ]

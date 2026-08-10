@@ -32,17 +32,19 @@ The application supports light, dark, and system-based themes. Users can toggle 
 
 ### Light Theme
 
-- White/light gray backgrounds
-- Dark text for readability
-- Glass backgrounds: `bg-white/40` to `bg-white/80`
+- Neutral `#f5f5f7` application canvas with white layered surfaces
+- Near-black `#1d1d1f` text for readability
+- System blue (`#0071e3`) for primary actions and focus
+- Glass backgrounds: approximately 60–80% white with high saturation blur
 - Borders need higher opacity to be visible (avoid `border-border/30` or lower)
 
 ### Dark Theme
 
-- Dark gray/black backgrounds
-- Light text for contrast
+- Black application canvas with elevated graphite surfaces
+- Off-white text for contrast
+- Brighter system blue (`#2997ff`) for primary actions and focus
 - Adjusted accent colors for visibility
-- Glass backgrounds: `bg-white/5` to `bg-black/80`
+- Glass backgrounds: graphite at approximately 68–82% opacity
 - Borders are more visible due to white-on-dark contrast
 
 ### Glassmorphism Considerations
@@ -52,4 +54,4 @@ The app uses glassmorphism styling (see `docs/features/theme__glassmorphism.md`)
 - **Backgrounds**: Always specify both light and dark variants (`bg-white/40 dark:bg-white/5`)
 - **Borders**: Use `border-border/50` minimum for visibility in light mode; `border-border/30` becomes invisible
 - **Shadows**: Light mode uses subtle shadows; dark mode uses darker, more prominent shadows
-- **Backdrop blur**: Works in both themes but is more noticeable against the gradient mesh background
+- **Backdrop blur**: Keep it restrained against the solid application canvas

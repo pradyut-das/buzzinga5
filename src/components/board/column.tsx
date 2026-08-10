@@ -179,7 +179,7 @@ export function Column({ id, boardId, name, isCollapsed, tasks }: ColumnProps) {
       ref={setSortableRef}
       style={style}
       className={cn(
-        "relative flex h-full shrink-0 flex-col glass glass-strong transition-[width] duration-200 ease-in-out",
+        "board-column relative flex h-full shrink-0 flex-col glass glass-strong transition-[width] duration-200 ease-in-out",
         collapsed ? "w-10" : "w-72",
         isDragging && "opacity-50",
       )}
@@ -231,7 +231,7 @@ export function Column({ id, boardId, name, isCollapsed, tasks }: ColumnProps) {
         )}
       >
         {/* Column Header */}
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <div className="board-column-header flex items-center gap-2 border-b border-border px-3 py-2">
           <Button
             variant="ghost"
             size="icon"

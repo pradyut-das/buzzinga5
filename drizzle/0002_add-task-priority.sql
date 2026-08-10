@@ -1,1 +1,0 @@
-ALTER TABLE `tasks` ADD `priority` text DEFAULT 'none' NOT NULL;

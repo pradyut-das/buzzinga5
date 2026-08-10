@@ -1,23 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { boards, columns, tasks, contributors, taskAssignees, users } from "@/db/schema";
+import {
+  boards,
+  clients,
+  columns,
+  tasks,
+  contributors,
+  taskAssignees,
+  taskCategories,
+  users,
+} from "@/db/schema";
 import { hashPassword } from "@/lib/password-hash";
 import { setBoardPassword } from "@/lib/board-password";
-import { createSession, getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser } from "@/lib/auth/session";
 import { addBoardMember } from "@/lib/auth/membership";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 // Only available in test environments (PLAYWRIGHT_TEST is set by playwright config)
 // We can't rely on NODE_ENV because Next.js production builds force it to "production"
 const IS_TEST_ENV =
   process.env.PLAYWRIGHT_TEST === "true" || process.env.NODE_ENV === "development";
 
+/** Seeds are written by name, so a category is created the first time it is used. */
+async function categoryId(boardId: string, name: string): Promise<string> {
+  const existing = await db.query.taskCategories.findFirst({
+    where: and(eq(taskCategories.boardId, boardId), eq(taskCategories.name, name)),
+    columns: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const id = crypto.randomUUID();
+  await db.insert(taskCategories).values({ id, boardId, name, position: 0 });
+  return id;
+}
+
 interface SeedBoardRequest {
   title?: string;
   password?: string;
+  /** Attaches the board to a client, which is what the desk screens read. */
+  client?: string;
   /** Optional: pre-create tasks in columns */
   tasks?: Array<{
     title: string;
     columnIndex?: number; // 0=To Do, 1=Doing, 2=Done, 3=Archive
+    /** A category name; created on the board the first time it is used. */
+    category?: string;
     assignees?: string[]; // contributor names to create and assign
     /** Optional: offset from base time in seconds (for deterministic ordering) */
     createdAtOffset?: number;
@@ -31,6 +60,7 @@ interface SeedBoardRequest {
 
 interface SeedBoardResponse {
   boardId: string;
+  clientId: string | null;
   columnIds: string[];
   taskIds: string[];
   contributorIds: Record<string, string>; // name -> id mapping
@@ -49,25 +79,67 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const passwordHash = hashPassword(password);
 
   // Boards require a signed-in owner, so seed a throwaway account when the
-  // request has no session yet.
+  // request has no session yet. The account is created in Supabase and then
+  // signed in for real, so the response carries genuine auth cookies rather
+  // than a fixture the app would reject.
   let user = await getCurrentUser();
   if (!user) {
-    const userId = crypto.randomUUID();
-    const email = `seed-${userId}@example.com`;
+    const email = `seed-${crypto.randomUUID()}@example.com`;
+    const seedPassword = "seedpass123";
+
+    const { data, error } = await createAdminClient().auth.admin.createUser({
+      email,
+      password: seedPassword,
+      email_confirm: true,
+      user_metadata: { name: "Seed User" },
+    });
+
+    if (error || !data.user) {
+      return NextResponse.json(
+        { error: `Could not seed a user: ${error?.message ?? "unknown error"}` },
+        { status: 500 },
+      );
+    }
+
     await db.insert(users).values({
-      id: userId,
+      id: data.user.id,
       email,
       name: "Seed User",
-      passwordHash: hashPassword("seedpass123"),
       createdAt: new Date(),
     });
-    await createSession(userId);
-    user = { id: userId, email, name: "Seed User" };
+
+    const supabase = await createClient();
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password: seedPassword,
+    });
+    if (signInError) {
+      return NextResponse.json(
+        { error: `Could not sign in the seeded user: ${signInError.message}` },
+        { status: 500 },
+      );
+    }
+
+    user = { id: data.user.id, email, name: "Seed User" };
+  }
+
+  // A client is optional: the older board tests do not need one, the desk
+  // screens cannot work without one.
+  let clientId: string | null = null;
+  if (body.client) {
+    clientId = crypto.randomUUID();
+    await db.insert(clients).values({
+      id: clientId,
+      name: body.client,
+      initials: body.client.slice(0, 2).toUpperCase(),
+      color: "#d8b4fe",
+    });
   }
 
   // Create board
   await db.insert(boards).values({
     id: boardId,
+    clientId,
     title,
     passwordHash,
     ownerId: user.id,
@@ -140,6 +212,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         boardId,
         columnId: columnIds[columnIndex],
         title: taskDef.title,
+        categoryId: taskDef.category ? await categoryId(boardId, taskDef.category) : null,
+        clientId,
         position: taskIds.length - 1,
         priority: "none",
         createdAt,
@@ -176,6 +250,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const response: SeedBoardResponse = {
     boardId,
+    clientId,
     columnIds,
     taskIds,
     contributorIds,

@@ -1,0 +1,7 @@
+.env*
+backup-users-rekey.json
+screens/
+playwright-report/
+test-results/
+*.db
+*.db-journal

@@ -1,61 +1,16 @@
 "use server";
 
 import { db } from "@/db";
-import { comments, tasks, uploadedFiles } from "@/db/schema";
-import { eq, and, lt, sql, inArray } from "drizzle-orm";
+import { comments, tasks } from "@/db/schema";
+import { eq, and, lt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireBoardAccess } from "@/lib/secure-board";
-import { deleteFilesWithTolerance } from "@/lib/storage";
 import {
   queueCommentNotification,
   queueMentionNotifications,
   extractMentionIds,
 } from "@/lib/notifications";
 import { requireTask, requireComment, requireContributor } from "@/lib/require-resource";
-
-/**
- * Extract all file URLs from Tiptap JSON content.
- * Walks the content tree and collects:
- * - `src` from `image` nodes
- * - `url` from `fileAttachment` nodes
- */
-function extractFileUrlsFromContent(content: string): string[] {
-  try {
-    const json = JSON.parse(content);
-    const urls: string[] = [];
-
-    function walkNodes(nodes: unknown[] | undefined) {
-      if (!nodes || !Array.isArray(nodes)) return;
-
-      for (const node of nodes) {
-        if (typeof node !== "object" || node === null) continue;
-
-        const n = node as { type?: string; attrs?: Record<string, unknown>; content?: unknown[] };
-
-        // Image nodes have src attribute
-        if (n.type === "image" && n.attrs?.src && typeof n.attrs.src === "string") {
-          urls.push(n.attrs.src);
-        }
-
-        // FileAttachment nodes have url attribute
-        if (n.type === "fileAttachment" && n.attrs?.url && typeof n.attrs.url === "string") {
-          urls.push(n.attrs.url);
-        }
-
-        // Recursively walk child nodes
-        if (n.content) {
-          walkNodes(n.content);
-        }
-      }
-    }
-
-    walkNodes(json.content);
-    return urls;
-  } catch {
-    // If content is not valid JSON, return empty array
-    return [];
-  }
-}
 
 export async function createComment(
   taskId: string,
@@ -146,27 +101,6 @@ export async function updateComment(
     await requireContributor(stakeholderId, boardId);
   }
 
-  // Clean up orphaned files (files in DB but not in the new content)
-  const filesInDb = await db.query.uploadedFiles.findMany({
-    where: eq(uploadedFiles.commentId, commentId),
-  });
-
-  if (filesInDb.length > 0) {
-    const urlsInContent = new Set(extractFileUrlsFromContent(content));
-    const orphanedFiles = filesInDb.filter((file) => !urlsInContent.has(file.url));
-
-    // Delete orphaned files from storage (tolerates individual failures)
-    if (orphanedFiles.length > 0) {
-      await deleteFilesWithTolerance(orphanedFiles);
-      await db.delete(uploadedFiles).where(
-        inArray(
-          uploadedFiles.id,
-          orphanedFiles.map((f) => f.id),
-        ),
-      );
-    }
-  }
-
   // Track new mentions before updating
   const oldMentionIds = new Set(extractMentionIds(existingComment.content));
   const newMentionIds = extractMentionIds(content);
@@ -198,17 +132,6 @@ export async function updateComment(
 export async function deleteComment(commentId: string, boardId: string) {
   await requireBoardAccess(boardId);
   await requireComment(commentId, boardId);
-
-  // Get all files associated with this comment
-  const files = await db.query.uploadedFiles.findMany({
-    where: eq(uploadedFiles.commentId, commentId),
-  });
-
-  // Delete files from storage (tolerates individual failures) and database
-  if (files.length > 0) {
-    await deleteFilesWithTolerance(files);
-    await db.delete(uploadedFiles).where(eq(uploadedFiles.commentId, commentId));
-  }
 
   // Delete the comment
   await db.delete(comments).where(eq(comments.id, commentId));

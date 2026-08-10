@@ -41,11 +41,8 @@ interface CommentsSectionProps {
 export function CommentsSection({ taskId, boardId, comments, contributors }: CommentsSectionProps) {
   const [newCommentContent, setNewCommentContent] = useState("");
   const [selectedStakeholderId, setSelectedStakeholderId] = useState<string | null>(null);
-  // Generate a pending comment ID for file uploads - regenerated after each comment submission
+  // Pre-generate the comment id so the draft has one - regenerated after each submission
   const [pendingCommentId, setPendingCommentId] = useState(() => crypto.randomUUID());
-  // Track concurrent upload batches with a counter (not boolean) since multiple batches can overlap
-  const [uploadingCount, setUploadingCount] = useState(0);
-  const isUploading = uploadingCount > 0;
 
   // Derive current author data from contributors (normalized source of truth)
   // This ensures comment badges reflect latest contributor name/color
@@ -87,7 +84,7 @@ export function CommentsSection({ taskId, boardId, comments, contributors }: Com
         authorId: selectedAuthorId,
         content: newCommentContent,
         stakeholderId: selectedStakeholderId,
-        commentId: pendingCommentId, // Use the pending ID so uploaded files are linked
+        commentId: pendingCommentId,
       },
       {
         onSuccess: () => {
@@ -104,21 +101,16 @@ export function CommentsSection({ taskId, boardId, comments, contributors }: Com
   };
 
   const canSubmit =
-    !isRichTextEmpty(newCommentContent) &&
-    selectedAuthorId &&
-    !createCommentMutation.isPending &&
-    !isUploading;
+    !isRichTextEmpty(newCommentContent) && selectedAuthorId && !createCommentMutation.isPending;
 
   // Compute reason for disabled state (in priority order)
   const disabledReason = !selectedAuthorId
     ? "Missing an author"
     : isRichTextEmpty(newCommentContent)
       ? "Missing content"
-      : isUploading
-        ? "Upload in progress..."
-        : createCommentMutation.isPending
-          ? "Saving..."
-          : null;
+      : createCommentMutation.isPending
+        ? "Saving..."
+        : null;
 
   return (
     <div className="space-y-3 p-6">
@@ -175,10 +167,6 @@ export function CommentsSection({ taskId, boardId, comments, contributors }: Com
             content={newCommentContent}
             onChange={setNewCommentContent}
             placeholder="Write your comment..."
-            boardId={boardId}
-            commentId={pendingCommentId}
-            onUploadStart={() => setUploadingCount((c) => c + 1)}
-            onUploadEnd={() => setUploadingCount((c) => c - 1)}
             contributors={contributors}
           />
         </div>

@@ -65,7 +65,7 @@ export default function BoardEmailViewerPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen gradient-holographic p-8">
+      <div className="app-canvas min-h-screen p-8">
         <div className="mx-auto max-w-5xl">
           <div className="glass glass-strong border border-border/50 p-8 text-center">
             <p className="text-muted-foreground">Loading...</p>
@@ -82,7 +82,7 @@ export default function BoardEmailViewerPage({ params }: PageProps) {
 
   if (notFound || !email) {
     return (
-      <div className="min-h-screen gradient-holographic p-8">
+      <div className="app-canvas min-h-screen p-8">
         <div className="mx-auto max-w-4xl">
           <div className="glass glass-strong border border-border/50 p-8 text-center">
             <h1 className="text-2xl font-bold text-foreground mb-4">Email Not Found</h1>
@@ -98,7 +98,7 @@ export default function BoardEmailViewerPage({ params }: PageProps) {
   const notificationIds = JSON.parse(email.notificationIds) as string[];
 
   return (
-    <div className="min-h-screen gradient-holographic p-8">
+    <div className="app-canvas min-h-screen p-8">
       <div className="mx-auto max-w-5xl">
         <div className="glass glass-strong border border-border/50 p-8">
           {/* Header */}

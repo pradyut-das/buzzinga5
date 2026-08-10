@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { GlobalDepthCanvas } from "@/components/canvas/global-depth-canvas";
 import "../styles/globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// One typeface for the whole product. Weight and letter-spacing carry the
+// hierarchy that a second family used to.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "Itacorubi Kanban",
+  title: "Squirrl",
   description: "A simple Kanban board for task management",
 };
 
@@ -25,7 +23,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className={`${inter.variable} antialiased`}>
+        <GlobalDepthCanvas />
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

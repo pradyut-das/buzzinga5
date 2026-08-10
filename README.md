@@ -1,4 +1,4 @@
-# Itacorubi Kanban
+# Squirrl
 
 A collaborative Kanban board application built with Next.js.
 Create and manage multiple boards with customizable columns, tasks, and team contributors.

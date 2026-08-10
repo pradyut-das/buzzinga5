@@ -1,0 +1,802 @@
+@import url("https://fonts.cdnfonts.com/css/thegoodmonolith");
+
+/* The anomaly scanner visual, ported verbatim from the assistant scene. All
+   rules are scoped under .scanner-scope so the desktop UI is untouched. The
+   control panel and the overlay panels are hidden per the spec — only the
+   scene, the header, the scanner frame and the audio visuals remain. */
+
+.scanner-scope {
+  --bg-color: #12100f;
+  --grid-color: rgba(255, 240, 230, 0.05);
+  --text-primary: #f3ede9;
+  --text-secondary: #c2b8b2;
+  --text-highlight: #ff4e42;
+  --accent-primary: #ff4e42;
+  --accent-secondary: #c2362f;
+  --accent-tertiary: #ffb3ab;
+  --panel-bg: rgba(30, 26, 24, 0.7);
+  --panel-border: rgba(255, 78, 66, 0.3);
+  --panel-highlight: rgba(255, 78, 66, 0.1);
+  --scanner-line: rgba(255, 78, 66, 0.7);
+
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  font-family: "TheGoodMonolith", monospace;
+  text-transform: uppercase;
+  font-size: 1rem;
+}
+
+.scanner-scope,
+.scanner-scope *,
+.scanner-scope *::before,
+.scanner-scope *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.scanner-scope button,
+.scanner-scope input,
+.scanner-scope select,
+.scanner-scope textarea {
+  font-family: inherit;
+}
+
+.scanner-scope .space-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("https://assets.codepen.io/7558/space-bg-002.jpg");
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+  opacity: 0.8;
+}
+
+.scanner-scope #three-container {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  cursor: grab;
+}
+
+.scanner-scope #three-container:active {
+  cursor: grabbing;
+}
+
+.scanner-scope .interface-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.scanner-scope .grid-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(to right, var(--grid-color) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-color) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.scanner-scope .header {
+  display: flex;
+  justify-content: space-between;
+  padding: 1.25rem;
+}
+
+.scanner-scope .header-item {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.scanner-scope .scanner-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 400px;
+  height: 400px;
+  border: 1px solid var(--accent-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: auto;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+
+/* The square around the sphere only appears while a tool call is running. */
+.scanner-scope .scanner-frame.scanner-frame-active {
+  opacity: 1;
+}
+
+.scanner-scope .scanner-frame::before,
+.scanner-scope .scanner-frame::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: var(--accent-primary);
+  border-style: solid;
+}
+
+.scanner-scope .scanner-frame::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+
+.scanner-scope .scanner-frame::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+.scanner-scope .scanner-frame .corner-tl {
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 20px;
+  height: 20px;
+  border-top: 2px solid var(--accent-primary);
+  border-left: 2px solid var(--accent-primary);
+}
+
+.scanner-scope .scanner-frame .corner-tr {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 20px;
+  height: 20px;
+  border-top: 2px solid var(--accent-primary);
+  border-right: 2px solid var(--accent-primary);
+}
+
+.scanner-scope .scanner-frame .corner-bl {
+  position: absolute;
+  bottom: -1px;
+  left: -1px;
+  width: 20px;
+  height: 20px;
+  border-bottom: 2px solid var(--accent-primary);
+  border-left: 2px solid var(--accent-primary);
+}
+
+.scanner-scope .scanner-frame .corner-br {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 20px;
+  height: 20px;
+  border-bottom: 2px solid var(--accent-primary);
+  border-right: 2px solid var(--accent-primary);
+}
+
+.scanner-scope .scanner-id {
+  position: absolute;
+  bottom: -30px;
+  left: 0;
+  font-size: 0.75rem;
+  color: var(--accent-primary);
+}
+
+.scanner-scope .scanner-id-right {
+  position: absolute;
+  bottom: -30px;
+  right: 0;
+  font-size: 0.75rem;
+  color: var(--accent-primary);
+}
+
+.scanner-scope .scanner-line {
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  background: var(--scanner-line);
+  top: 0;
+  box-shadow: 0 0 10px var(--accent-primary);
+  animation: scanner-scan 4s linear infinite;
+}
+
+@keyframes scanner-scan {
+  0% {
+    top: 0;
+  }
+
+  100% {
+    top: 100%;
+  }
+}
+
+.scanner-scope .data-panels {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.scanner-scope .data-panel {
+  width: 300px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  padding: 0.9375rem;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.scanner-scope .data-panel-title {
+  font-size: 0.875rem;
+  color: var(--accent-primary);
+  margin-bottom: 0.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.scanner-scope .data-readouts {
+  margin-top: 0.625rem;
+}
+
+.scanner-scope .data-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.3125rem;
+  font-size: 0.75rem;
+}
+
+.scanner-scope .data-label {
+  color: var(--text-secondary);
+}
+
+.scanner-scope .data-value {
+  color: var(--text-primary);
+}
+
+.scanner-scope .data-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0.625rem 0;
+  position: relative;
+  border-radius: 3px;
+}
+
+.scanner-scope .data-bar-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  border-radius: 3px;
+  transition: width 0.5s;
+}
+
+.scanner-scope .waveform {
+  width: 100%;
+  height: 50px;
+  margin: 0.625rem 0;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.scanner-scope .waveform-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.scanner-scope .control-panel {
+  width: 300px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  padding: 0.9375rem;
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.scanner-scope .control-panel h3 {
+  font-size: 0.875rem;
+  color: var(--accent-primary);
+  margin-bottom: 0.9375rem;
+}
+
+.scanner-scope .control-group {
+  margin-bottom: 0.9375rem;
+}
+
+.scanner-scope .control-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.scanner-scope .control-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.scanner-scope .control-value {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+}
+
+.scanner-scope .slider-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.scanner-scope .slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+  border-radius: 3px;
+}
+
+.scanner-scope .slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  cursor: pointer;
+}
+
+.scanner-scope .buttons {
+  display: flex;
+  gap: 0.625rem;
+  margin-top: 0.9375rem;
+}
+
+.scanner-scope .btn {
+  flex: 1;
+  padding: 0.5rem 0;
+  background: var(--panel-highlight);
+  border: 1px solid var(--panel-border);
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scanner-scope .btn:hover {
+  background: var(--panel-border);
+}
+
+.scanner-scope .terminal-panel {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  width: 500px;
+  height: 150px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  overflow: hidden;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.scanner-scope .terminal-header {
+  padding: 0.5rem 0.625rem;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.875rem;
+  color: var(--accent-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scanner-scope .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-direction: row;
+  margin-bottom: 1rem;
+}
+
+.scanner-scope .terminal-content {
+  padding: 0.625rem;
+  height: calc(100% - 31px);
+  overflow-y: auto;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.scanner-scope .terminal-line {
+  margin-bottom: 0.3125rem;
+}
+
+.scanner-scope .command-line {
+  color: white;
+}
+
+.scanner-scope .regular-line {
+  color: var(--text-highlight);
+}
+
+.scanner-scope .typing {
+  position: relative;
+}
+
+.scanner-scope .typing::after {
+  content: "|";
+  position: absolute;
+  animation: scanner-blink 1s infinite;
+}
+
+@keyframes scanner-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+.scanner-scope .loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-color);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  transition: opacity 0.5s;
+}
+
+.scanner-scope .loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 500px;
+  padding: 1.25rem;
+}
+
+.scanner-scope .preloader-canvas-container {
+  width: 180px;
+  height: 180px;
+}
+
+.scanner-scope .loading-text {
+  margin-top: 1.25rem;
+  text-align: center;
+  color: var(--accent-primary);
+  letter-spacing: 2px;
+  font-size: 0.875rem;
+}
+
+.scanner-scope .notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  padding: 0.625rem 1.25rem;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  color: var(--accent-primary);
+  opacity: 0;
+  transition: opacity 0.3s;
+  z-index: 100;
+}
+
+.scanner-scope .drag-handle {
+  cursor: move;
+  width: auto;
+  height: 100%;
+  color: var(--accent-primary);
+}
+
+.scanner-scope .particle-trail {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.7;
+  transition: opacity 0.5s;
+}
+
+.scanner-scope .circular-visualizer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 450px;
+  height: 450px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.scanner-scope .circular-visualizer canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.scanner-scope .audio-wave {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(255, 78, 66, 0.1);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.scanner-scope .audio-wave::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 78, 66, 0.05);
+  animation: scanner-pulse 4s infinite;
+}
+
+@keyframes scanner-pulse {
+  0% {
+    width: 100%;
+    height: 100%;
+    opacity: 0.5;
+  }
+
+  50% {
+    width: 120%;
+    height: 120%;
+    opacity: 0;
+  }
+
+  100% {
+    width: 100%;
+    height: 100%;
+    opacity: 0.5;
+  }
+}
+
+.scanner-scope .spectrum-analyzer {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 400px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 5px;
+  overflow: hidden;
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.scanner-scope .spectrum-header {
+  padding: 0.5rem 0.625rem;
+  background: rgba(0, 0, 0, 0.3);
+  font-size: 0.875rem;
+  color: var(--accent-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scanner-scope .spectrum-content {
+  padding: 0.625rem;
+  position: relative;
+}
+
+.scanner-scope .spectrum-canvas {
+  width: 100%;
+  height: 120px;
+  display: block;
+}
+
+.scanner-scope .audio-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin-top: 0.9375rem;
+  padding: 0 0.625rem 0.625rem;
+}
+
+.scanner-scope .audio-file-input {
+  display: none;
+}
+
+.scanner-scope .audio-file-btn {
+  display: block;
+  padding: 0.5rem 0;
+  background: var(--panel-highlight);
+  border: 1px solid var(--panel-border);
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  margin-bottom: 0.625rem;
+}
+
+.scanner-scope .audio-file-btn:hover {
+  background: var(--panel-border);
+}
+
+.scanner-scope .audio-file-label {
+  display: block;
+  padding: 0.5rem 0.625rem;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+  border-radius: 3px;
+  margin-bottom: 0.625rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scanner-scope .audio-player {
+  width: 100%;
+  margin-bottom: 0.625rem;
+}
+
+.scanner-scope .controls-row {
+  display: flex;
+  gap: 0.625rem;
+  margin-bottom: 0.625rem;
+}
+
+.scanner-scope .audio-sensitivity-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.3125rem;
+  font-size: 0.75rem;
+}
+
+.scanner-scope .audio-sensitivity-value {
+  color: var(--accent-primary);
+}
+
+.scanner-scope .demo-tracks {
+  margin-top: 0.625rem;
+  margin-bottom: 0.9375rem;
+}
+
+.scanner-scope .demo-tracks-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.3125rem;
+  display: block;
+}
+
+.scanner-scope .demo-track-btn {
+  display: inline-block;
+  padding: 0.3125rem 0.625rem;
+  margin-right: 0.3125rem;
+  margin-bottom: 0.3125rem;
+  background: var(--panel-highlight);
+  border: 1px solid var(--panel-border);
+  color: var(--accent-primary);
+  font-size: 0.6875rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scanner-scope .demo-track-btn:hover {
+  background: var(--panel-border);
+}
+
+.scanner-scope .demo-track-btn.active {
+  background: var(--accent-primary);
+  color: #000;
+}
+
+.scanner-scope .youtube-input {
+  display: flex;
+  margin-top: 0.625rem;
+  margin-bottom: 0.625rem;
+}
+
+.scanner-scope .youtube-url {
+  flex: 1;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--panel-border);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  border-radius: 3px 0 0 3px;
+}
+
+.scanner-scope .youtube-load-btn {
+  padding: 0.5rem 0.625rem;
+  background: var(--panel-highlight);
+  border: 1px solid var(--panel-border);
+  border-left: none;
+  color: var(--accent-primary);
+  font-size: 0.75rem;
+  border-radius: 0 3px 3px 0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scanner-scope .youtube-load-btn:hover {
+  background: var(--panel-border);
+}
+
+.scanner-scope .youtube-error {
+  color: var(--accent-tertiary);
+  font-size: 0.6875rem;
+  margin-top: 0.3125rem;
+  display: none;
+}
+
+.scanner-scope .preloader-canvas-container {
+  position: relative;
+}
+
+.scanner-scope .preloader-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.scanner-scope .floating-particles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* The assistant keeps only the scene: every control and overlay panel is
+   hidden so the scanner is a pure voice-reactive visual. */
+.scanner-scope .control-panel,
+.scanner-scope .data-panel,
+.scanner-scope .terminal-panel,
+.scanner-scope .spectrum-analyzer {
+  display: none !important;
+}
