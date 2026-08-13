@@ -2,12 +2,11 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 import type { ContributorColor, TaskStatus } from "@/db/schema";
+import { ModalShell } from "@/components/reference/modal-shell";
 import { TaskDoc } from "@/components/task/task-doc";
 import { PeopleRail } from "@/components/task/people-rail";
-import { CategoryChip, StatusPicker } from "@/components/task/task-chrome";
+import { StatusPicker } from "@/components/task/task-chrome";
 import { setTaskCategory } from "@/actions/task-workspace";
 import { setTaskDueDate } from "@/actions/agency";
 
@@ -47,40 +46,39 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
   const { task, category, categories, clientId, contributors } = props;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const close = () => {
+    if (clientId) router.push(`/clients/${clientId}`);
+    else router.back();
+  };
 
   return (
-    <section className="sq-panel sq-task-workspace">
-      <header className="sq-task-head">
-        <div className="sq-task-title-block">
-          {clientId && (
-            <Link href={`/clients/${clientId}`} className="sq-task-back" aria-label="Back to board">
-              <ArrowLeft aria-hidden="true" />
-            </Link>
-          )}
-
-          <div className="sq-task-identity">
-            <div className="sq-task-crumbs">
-              <CategoryChip category={category} />
-            </div>
-            <h2>{task.title}</h2>
-            <p className="sq-task-summary">
-              Shape the brief, review the work, and keep the next decision clear.
-            </p>
-          </div>
-        </div>
-
-        <div className="sq-task-head-actions">
+    <ModalShell
+      open
+      onClose={close}
+      title={task.title}
+      description="Shape the brief, review the work, and keep the next decision clear."
+      footer={
+        <button
+          type="button"
+          onClick={close}
+          className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#185be0]"
+        >
+          Done
+        </button>
+      }
+    >
+      <div className="sq ref-task-details">
+        <div className="ref-task-details-controls">
           <div className="sq-task-control">
             <span>Stage</span>
             <StatusPicker taskId={task.id} status={task.status} />
           </div>
           <label className="sq-task-control">
-            <span>Due</span>
+            <span>Due date</span>
             <input
               type="date"
               aria-label="Due date"
               className="sq-fieldbox"
-              // The input speaks YYYY-MM-DD; the column stores end of that day.
               value={task.dueAt ? task.dueAt.slice(0, 10) : ""}
               disabled={pending}
               onChange={(event) => {
@@ -116,19 +114,15 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
             </select>
           </label>
         </div>
-      </header>
 
-      <div className="sq-task-body">
-        <div className="sq-task-main">
-          <TaskDoc
-            taskId={task.id}
-            doc={task.doc}
-            contributors={contributors}
-            placeholder="What is this, and what does done look like?"
-          />
-        </div>
+        <TaskDoc
+          taskId={task.id}
+          doc={task.doc}
+          contributors={contributors}
+          placeholder="What is this, and what does done look like?"
+        />
 
-        <aside className="sq-task-rail">
+        <div className="ref-task-details-people">
           <PeopleRail
             taskId={task.id}
             contributors={contributors}
@@ -138,8 +132,8 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
             clients={props.clients}
             clientId={clientId}
           />
-        </aside>
+        </div>
       </div>
-    </section>
+    </ModalShell>
   );
 }

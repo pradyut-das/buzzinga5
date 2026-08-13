@@ -7,6 +7,7 @@
 @import "./glassmorphism.css";
 @import "./tiptap.css";
 @import "./creator-desk.css";
+@import "./squirrl-reference.css";
 
 @layer base {
   html {
@@ -25,11 +26,14 @@
     letter-spacing: -0.01em;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
+    margin: 0;
+    background: #fafbfc;
+    color: #0b1020;
   }
 
   ::selection {
-    color: white;
-    background: #0071e3;
+    background: #dbe8ff;
+    color: inherit;
   }
 
   :focus-visible {

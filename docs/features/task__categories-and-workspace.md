@@ -23,11 +23,13 @@ every write goes through
 ### Opening a task
 
 - Click a card on the client board, or go to `/clients/{clientId}/tasks/{taskId}`
-- The workspace opens over a dimmed board with a back control, the category
-  chip, `Stage`, `Due` and `Category` controls in the header
-- The brief fills the main column; the ownership rail sits alongside it
-- On narrow screens the header controls become a two-column row, and the main
-  column and rail share one vertical scroll
+- The workspace opens in the same centered 610px reference modal shell used by
+  create dialogs, over a 20% slate backdrop.
+- `Stage`, `Due date`, and `Category` use the shared modal field treatment.
+- The brief and ownership controls form one vertically scrolling flow instead
+  of a separate wide workspace and side rail.
+- On narrow screens the modal keeps a 16px viewport gutter and all controls
+  collapse to one column.
 
 ### Writing the brief
 

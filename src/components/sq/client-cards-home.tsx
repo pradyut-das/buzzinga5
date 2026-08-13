@@ -1,37 +1,70 @@
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import { PageHeader } from "@/components/reference/page-header";
+import { CreateClientAction } from "@/components/reference/page-create-actions";
 import type { ClientSummary } from "@/lib/agency/queries";
 
-/**
- * Non-admin homepage. Members don't get the voice agent — a client is a
- * board, so a grid of client cards is the whole desk for everyone else.
- */
-export function ClientCardsHome({ clients }: { clients: ClientSummary[] }) {
+export function ClientCardsHome({
+  clients,
+  canCreate = false,
+}: {
+  clients: ClientSummary[];
+  canCreate?: boolean;
+}) {
   return (
-    <main className="sq-main sq-client-cards-home">
-      <header className="sq-top">
-        <span className="sq-crumb">Desk / Clients</span>
-      </header>
-
-      <div className="sq-client-card-grid">
-        {clients.map((client) => (
-          <Link key={client.id} href={`/clients/${client.id}`} className="sq-client-card">
-            <span className="sq-avatar" style={{ ["--av" as string]: client.color }}>
-              {client.initials}
-            </span>
-            <strong>{client.name}</strong>
-            <span className="sq-meta">
-              <i
-                className={`sq-dot${client.health === "risk" ? " bad" : client.health === "watch" ? " warn" : ""}`}
-              />
-              {client.openTasks} open
-            </span>
-            {client.pendingApprovals > 0 && (
-              <span className="sq-count">{client.pendingApprovals}</span>
-            )}
-          </Link>
-        ))}
-        {!clients.length && <p className="sq-empty">No clients yet</p>}
-      </div>
-    </main>
+    <div className="mx-auto max-w-[1300px]">
+      <PageHeader title="Clients" description="Your active agency accounts.">
+        {canCreate && <CreateClientAction />}
+      </PageHeader>
+      {clients.length ? (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {clients.map((client) => (
+            <Link
+              key={client.id}
+              href={`/clients/${client.id}`}
+              className="group rounded-[18px] border border-line bg-white p-6 shadow-soft transition hover:-translate-y-0.5 hover:border-[#d9e4f5]"
+            >
+              <div className="flex items-start justify-between">
+                <div
+                  className="grid h-10 w-10 place-items-center rounded-xl text-sm font-semibold"
+                  style={{
+                    backgroundColor: `${client.color}14`,
+                    color: client.color,
+                  }}
+                >
+                  {client.initials.slice(0, 1)}
+                </div>
+                <ArrowUpRight className="h-5 w-5 text-slate-300 transition group-hover:text-primary" />
+              </div>
+              <h2 className="mt-8 text-xl font-semibold tracking-[-0.02em]">{client.name}</h2>
+              <div className="mt-5 flex gap-5 text-sm">
+                <div>
+                  <div className="font-semibold text-ink">{client.openTasks}</div>
+                  <div className="mt-1 text-muted">Active tasks</div>
+                </div>
+                <div>
+                  <div className="font-semibold text-ink">
+                    {client.nextDeadlineAt
+                      ? client.nextDeadlineAt.toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                        })
+                      : "—"}
+                  </div>
+                  <div className="mt-1 text-muted">Next deadline</div>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-[18px] border border-line bg-white p-12 text-center shadow-soft">
+          <h2 className="text-lg font-semibold">No clients yet</h2>
+          <p className="mt-2 text-sm text-muted">
+            Clients connected to your workspace appear here.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }

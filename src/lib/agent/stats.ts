@@ -89,16 +89,6 @@ export interface ActivityRow {
   createdAt: string;
 }
 
-export interface ApprovalRow {
-  taskId: string;
-  boardId: string;
-  boardTitle: string;
-  title: string;
-  assetType: "carousel" | "video" | "caption" | "post";
-  ageDays: number;
-  priority: TaskPriority;
-}
-
 export interface DashboardStats {
   generatedAt: string;
   totals: {
@@ -125,16 +115,7 @@ export interface DashboardStats {
   workload: PersonLoad[];
   risks: RiskRow[];
   activity: ActivityRow[];
-  /** Open tasks in review-like columns, newest activity first. */
-  approvals: ApprovalRow[];
   topPriority: string;
-}
-
-function inferAssetType(title: string): ApprovalRow["assetType"] {
-  if (/video|reel|short|cut|edit/i.test(title)) return "video";
-  if (/caption|copy|hook|script/i.test(title)) return "caption";
-  if (/carousel|slide/i.test(title)) return "carousel";
-  return "post";
 }
 
 function daysBetween(from: Date, to: Date): number {
@@ -183,7 +164,6 @@ export async function getDashboardStats(scope: AgentScope): Promise<DashboardSta
       workload: [],
       risks: [],
       activity: [],
-      approvals: [],
       topPriority: "Create your first board to start planning.",
     };
   }
@@ -248,7 +228,6 @@ export async function getDashboardStats(scope: AgentScope): Promise<DashboardSta
   }
 
   const risks: RiskRow[] = [];
-  const approvals: (ApprovalRow & { lastTouchedAt: number })[] = [];
   const totals = {
     boards: scope.boards.length,
     tasks: 0,
@@ -298,16 +277,6 @@ export async function getDashboardStats(scope: AgentScope): Promise<DashboardSta
       if (kind === "review") {
         totals.review += 1;
         if (pulse) pulse.review += 1;
-        approvals.push({
-          taskId: task.id,
-          boardId: task.boardId,
-          boardTitle: boardTitle.get(task.boardId) ?? "Board",
-          title: task.title,
-          assetType: inferAssetType(task.title),
-          ageDays,
-          priority: task.priority,
-          lastTouchedAt: lastTouched.getTime(),
-        });
       }
       if (kind === "blocked") {
         totals.blocked += 1;
@@ -459,10 +428,6 @@ export async function getDashboardStats(scope: AgentScope): Promise<DashboardSta
     workload,
     risks: risks.sort((a, b) => b.ageDays - a.ageDays).slice(0, 20),
     activity,
-    approvals: approvals
-      .sort((a, b) => b.lastTouchedAt - a.lastTouchedAt)
-      .slice(0, 8)
-      .map(({ lastTouchedAt: _lastTouchedAt, ...approval }) => approval),
     topPriority,
   };
 }

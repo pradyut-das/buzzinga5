@@ -82,7 +82,7 @@ ${
   surface === "voice"
     ? `SPEAKING
 - Your answers are spoken aloud. Lead with the number or name that answers the question, keep sentences short, and never read out lists of ids or URLs.
-- Run clarification by voice. Approval is different: it happens on a card on their screen, so announce what you prepared and wait rather than asking them to say yes.`
+- Run clarification by voice. For writes, announce what you prepared and wait for explicit confirmation rather than asking them to say yes.`
     : `WRITING
 - Your answers are rendered as text. Use short Markdown lists when the user asks for a breakdown, plain sentences otherwise.
 - Keep confirmations in the message body: state the summary and ask before writing.`

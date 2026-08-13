@@ -76,7 +76,7 @@ export async function deleteBoardCascade(boardId: string): Promise<void> {
   await db.delete(boards).where(eq(boards.id, boardId));
 }
 
-/** A client and every board, asset, approval, post and community under it. */
+/** A client and every board, asset, historical decision, post and community under it. */
 export async function deleteClientCascade(clientId: string): Promise<void> {
   const clientBoards = await db
     .select({ id: boards.id })

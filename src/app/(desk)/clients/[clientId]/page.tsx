@@ -19,6 +19,11 @@ export default async function ClientBoardPage({
       clientName={data.client.name}
       cadence={data.client.cadence}
       contact={data.client.contact}
+      nextDeadline={data.client.nextDeadlineAt?.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}
       columns={data.columns}
       categories={data.categories}
     />

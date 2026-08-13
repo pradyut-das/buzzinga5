@@ -1,28 +1,27 @@
-import { ClientCardsHome } from "@/components/sq/client-cards-home";
-import { HomeDesk } from "@/components/sq/home-desk";
+import { format, isToday } from "date-fns";
+import { VoicePlanner, type PlannerEvent } from "@/components/reference/voice-planner";
 import { geminiConfigured } from "@/lib/agent/gemini";
-import { isAdminEmail } from "@/lib/auth/admin";
-import { getAgencyHealth, listApprovals, listClients } from "@/lib/agency/queries";
-import { getCurrentUser } from "@/lib/auth/session";
+import { listScheduledPosts } from "@/lib/agency/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function DeskHome() {
-  const user = await getCurrentUser();
-
-  // Voice agent is admin-only; everyone else's desk is the client roster.
-  if (!isAdminEmail(user?.email)) {
-    const clients = await listClients();
-    return <ClientCardsHome clients={clients} />;
-  }
-
-  const [approvals, health] = await Promise.all([listApprovals("pending"), getAgencyHealth()]);
+  const posts = await listScheduledPosts();
+  const events: PlannerEvent[] = posts
+    .filter(({ post }) => isToday(post.scheduledAt))
+    .slice(0, 3)
+    .map(({ post, client }) => ({
+      id: post.id,
+      clientId: client.id,
+      clientName: client.name,
+      clientColor: client.color,
+      title: `${post.platform} · ${post.state}`,
+      at: format(post.scheduledAt, "h:mm a"),
+    }));
 
   return (
-    <HomeDesk
-      approvals={approvals}
-      agentEnabled={geminiConfigured()}
-      headline={`${health.label} · delivery health ${health.score}`}
-    />
+    <div className="mx-auto max-w-[1500px]">
+      <VoicePlanner agentEnabled={geminiConfigured()} events={events} />
+    </div>
   );
 }

@@ -1,188 +1,255 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
-  rectIntersection,
+  TouchSensor,
+  closestCorners,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import { BoardCard, ColumnDropZone } from "@/components/sq/board-card";
-import { LiveOrb } from "@/components/sq/live-orb";
-import { AgentNote } from "@/components/sq/workspace";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { Plus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
 import { createTask, moveTask } from "@/actions/agency";
-import { useGeminiLive } from "@/hooks/use-gemini-live";
+import { ModalShell, modalInputClass, modalLabelClass } from "@/components/reference/modal-shell";
+import { PageCreateButton } from "@/components/reference/page-create-actions";
+import { BoardCard, BoardCardOverlay, ColumnDropZone } from "@/components/sq/board-card";
 import type { BoardColumnView } from "@/lib/agency/queries";
 
-/**
- * A client is a board, so this is the client workspace. Cards drag between
- * columns and the move is applied locally first, then written — a dropped card
- * never snaps back while the server catches up. The rail stays put, board
- * actions float bottom-left and the orb bottom-right, so the live voice
- * session survives the whole session.
- */
+const DOTS = ["#94a3b8", "#3b82f6", "#f59e0b", "#38b27b", "#8d6cf7"];
+
+function findColumn(items: BoardColumnView[], taskId: string) {
+  return items.find((column) => column.tasks.some((task) => task.id === taskId));
+}
+
 export function ClientBoard({
   clientId,
   clientName,
   cadence,
   contact,
+  nextDeadline,
   columns,
   categories,
-  dimmed,
   children,
 }: {
   clientId: string;
   clientName: string;
   cadence: string | null;
   contact: string | null;
+  nextDeadline?: string | null;
   columns: BoardColumnView[];
-  /** The board's own categories; empty until someone creates one. */
   categories: { id: string; name: string; color: string }[];
-  dimmed?: boolean;
   children?: React.ReactNode;
 }) {
   const router = useRouter();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [draft, setDraft] = useState("");
-  // New work is uncategorized unless the board already has a word for it.
-  const [draftCategory, setDraftCategory] = useState("");
   const [board, setBoard] = useState(columns);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const [creatingColumnId, setCreatingColumnId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [draftCategory, setDraftCategory] = useState("");
+  const [draftDueDate, setDraftDueDate] = useState("");
+  const [pending, startTransition] = useTransition();
+  const dragOrigin = useRef<{ board: BoardColumnView[]; columnId: string } | null>(null);
+  const boardRef = useRef(board);
 
-  // Server data wins whenever it arrives; the local copy only covers the gap
-  // between dropping a card and the refresh landing.
-  useEffect(() => setBoard(columns), [columns]);
+  useEffect(() => {
+    setBoard(columns);
+    boardRef.current = columns;
+  }, [columns]);
 
-  const live = useGeminiLive({ onMutation: () => router.refresh() });
-  const toggleVoice = useCallback(() => {
-    if (live.isLive) live.stop();
-    else void live.start();
-  }, [live]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragStart = ({ active }: DragStartEvent) => {
+    const taskId = String(active.id);
+    const source = findColumn(board, taskId);
+    if (!source) return;
+    dragOrigin.current = { board, columnId: source.id };
+    setActiveId(taskId);
+  };
 
-  // 8px of travel before a drag starts, so a plain click still opens the task.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const onDragOver = ({ active, over }: DragOverEvent) => {
+    if (!over) return;
+    const taskId = String(active.id);
+    const overId = String(over.id);
 
-  const addTask = () => {
-    const title = draft.trim();
-    if (!title) return;
-    setDraft("");
-    startTransition(async () => {
-      await createTask(clientId, title, 0, draftCategory || null);
-      router.refresh();
+    setBoard((current) => {
+      const from = findColumn(current, taskId);
+      const to = current.find((column) => column.id === overId) ?? findColumn(current, overId);
+      if (!from || !to || from.id === to.id) return current;
+      const task = from.tasks.find((entry) => entry.id === taskId);
+      if (!task) return current;
+
+      const overIndex = to.tasks.findIndex((entry) => entry.id === overId);
+      const insertAt = overIndex >= 0 ? overIndex : to.tasks.length;
+
+      const next = current.map((column) => {
+        if (column.id === from.id) {
+          return { ...column, tasks: column.tasks.filter((entry) => entry.id !== taskId) };
+        }
+        if (column.id === to.id) {
+          const nextTasks = [...column.tasks];
+          nextTasks.splice(insertAt, 0, task);
+          return { ...column, tasks: nextTasks };
+        }
+        return column;
+      });
+      boardRef.current = next;
+      return next;
     });
   };
 
-  const findColumn = (taskId: string) =>
-    board.find((column) => column.tasks.some((task) => task.id === taskId));
-
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     setActiveId(null);
-    if (!over) return;
-
-    const from = findColumn(String(active.id));
-    // Dropping on a card means "this card's column"; dropping on the column
-    // body means the column itself.
-    const to = board.find((column) => column.id === over.id) ?? findColumn(String(over.id)) ?? null;
-    if (!from || !to || from.id === to.id) return;
-
-    const task = from.tasks.find((entry) => entry.id === active.id);
-    if (!task) return;
-
-    setBoard((current) =>
-      current.map((column) => {
-        if (column.id === from.id) {
-          return {
-            ...column,
-            tasks: column.tasks.filter((entry) => entry.id !== task.id),
-          };
-        }
-        if (column.id === to.id) {
-          return { ...column, tasks: [...column.tasks, task] };
-        }
-        return column;
-      }),
-    );
+    const origin = dragOrigin.current;
+    dragOrigin.current = null;
+    if (!origin) return;
+    if (!over) {
+      setBoard(origin.board);
+      boardRef.current = origin.board;
+      return;
+    }
+    const destination = findColumn(boardRef.current, String(active.id));
+    if (!destination || destination.id === origin.columnId) return;
 
     startTransition(async () => {
       try {
-        await moveTask(task.id, to.id);
+        await moveTask(String(active.id), destination.id);
         router.refresh();
-      } catch {
-        // The write failed, so put the card back where it came from.
-        setBoard(columns);
+      } catch (error) {
+        setBoard(origin.board);
+        boardRef.current = origin.board;
+        toast.error(error instanceof Error ? error.message : "Could not move task");
       }
     });
   };
 
-  const activeTask = activeId
-    ? board.flatMap((column) => column.tasks).find((task) => task.id === activeId)
-    : null;
+  const onDragCancel = () => {
+    if (dragOrigin.current) {
+      setBoard(dragOrigin.current.board);
+      boardRef.current = dragOrigin.current.board;
+    }
+    dragOrigin.current = null;
+    setActiveId(null);
+  };
+
+  const submitTask = () => {
+    const title = draft.trim();
+    const columnIndex = board.findIndex((column) => column.id === creatingColumnId);
+    if (!title || !draftDueDate || columnIndex < 0) return;
+    startTransition(async () => {
+      await createTask(clientId, title, columnIndex, draftCategory || null, draftDueDate);
+      setDraft("");
+      setDraftCategory("");
+      setDraftDueDate("");
+      setCreatingColumnId(null);
+      router.refresh();
+    });
+  };
+
+  const allTasks = board.flatMap((column) => column.tasks);
+  const open = board
+    .filter((column) => !/done|archive/i.test(column.name))
+    .reduce((count, column) => count + column.tasks.length, 0);
+  const progress = board
+    .filter((column) => /progress|doing|production/i.test(column.name))
+    .reduce((count, column) => count + column.tasks.length, 0);
+  const review = board
+    .filter((column) => /review/i.test(column.name))
+    .reduce((count, column) => count + column.tasks.length, 0);
+  const activeTask = activeId ? allTasks.find((task) => task.id === activeId) : null;
 
   return (
-    <main className="sq-main">
-      <header className="sq-top">
-        <span className="sq-crumb">
-          {clientName} / Content board{cadence ? ` · ${cadence}` : ""}
-        </span>
-        <div className="sq-top-actions">
-          {contact && <span className="sq-pill">AM · {contact}</span>}
+    <div className="mx-auto max-w-[1500px]">
+      <div className="flex flex-col gap-5 pb-6 pt-2 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-[38px] font-semibold tracking-[-0.035em]">{clientName}</h1>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Active
+            </span>
+          </div>
+          <p className="mt-1.5 text-[15px] text-muted">
+            {cadence ?? "Tasks and deliverables for this client."}
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            {[
+              [open, "Open", "#4f8df7"],
+              [progress, "In progress", "#f59e0b"],
+              [review, "Awaiting review", "#8d6cf7"],
+            ].map(([value, label, color]) => (
+              <div
+                key={String(label)}
+                className="flex min-w-[145px] items-center gap-3 rounded-[14px] border border-line bg-white px-4 py-3"
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: String(color) }}
+                />
+                <div>
+                  <div className="text-[15px] font-semibold">{String(value)}</div>
+                  <div className="text-xs text-muted">{String(label)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      </header>
+        <div className="flex w-full max-w-[250px] flex-col items-end gap-3">
+          {board[0] && <PageCreateButton onClick={() => setCreatingColumnId(board[0].id)} />}
+          <div className="w-full rounded-[16px] border border-line bg-white px-5 py-4 shadow-soft">
+            <div className="text-xs text-muted">Client contact</div>
+            <div className="mt-1 text-sm font-semibold">{contact ?? "—"}</div>
+            <div className="my-4 h-px bg-line" />
+            <div className="text-xs text-muted">Next review</div>
+            <div className="mt-1 text-sm font-semibold">{nextDeadline ?? "—"}</div>
+          </div>
+        </div>
+      </div>
 
       <DndContext
         id={`client-board-${clientId}`}
         sensors={sensors}
-        collisionDetection={rectIntersection}
-        onDragStart={({ active }: DragStartEvent) => setActiveId(String(active.id))}
-        onDragCancel={() => setActiveId(null)}
+        collisionDetection={closestCorners}
+        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+        autoScroll={{ acceleration: 12, threshold: { x: 0.12, y: 0.18 } }}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragCancel={onDragCancel}
         onDragEnd={onDragEnd}
       >
         <div
-          className="sq-board-shell"
-          style={dimmed ? { opacity: 0.4, filter: "blur(1px)" } : undefined}
+          role="region"
+          className="app-scrollbar flex gap-4 overflow-x-auto pb-3"
+          aria-label={`${clientName} Kanban board`}
         >
-          {board.map((column) => (
-            <section key={column.id} className="sq-column">
-              <div className="sq-colhead">
-                <span>{column.name}</span>
-                <span>{column.tasks.length}</span>
+          {board.map((column, index) => (
+            <section
+              key={column.id}
+              className="min-h-[520px] min-w-[270px] flex-1 rounded-[16px] border border-line bg-[#fcfdfe] p-3"
+            >
+              <div className="flex items-center gap-2 px-2 py-2.5">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: DOTS[index % DOTS.length] }}
+                />
+                <h2 className="text-[15px] font-semibold text-ink">{column.name}</h2>
+                <span className="ml-auto text-xs text-muted">{column.tasks.length}</span>
               </div>
-
-              {column.name.toLowerCase().includes("to do") && (
-                <div className="sq-add-task">
-                  <input
-                    className="sq-fieldbox"
-                    value={draft}
-                    placeholder="Add a task…"
-                    onChange={(event) => setDraft(event.target.value)}
-                    onKeyDown={(event) => event.key === "Enter" && addTask()}
-                  />
-                  {categories.length > 0 && (
-                    <select
-                      className="sq-fieldbox sq-inline-select"
-                      aria-label="New task category"
-                      value={draftCategory}
-                      onChange={(event) => setDraftCategory(event.target.value)}
-                    >
-                      <option value="">No category</option>
-                      {categories.map((option) => (
-                        <option key={option.id} value={option.id}>
-                          {option.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              )}
-
               <ColumnDropZone columnId={column.id}>
                 <SortableContext
                   items={column.tasks.map((task) => task.id)}
@@ -192,67 +259,91 @@ export function ClientBoard({
                     <BoardCard key={task.id} task={task} clientId={clientId} />
                   ))}
                 </SortableContext>
-
-                {!column.tasks.length && <p className="sq-sub">Drop a card here.</p>}
               </ColumnDropZone>
+              <button
+                type="button"
+                onClick={() => setCreatingColumnId(column.id)}
+                className="mt-3 flex w-full items-center gap-2 rounded-xl px-2 py-3 text-sm font-medium text-primary hover:bg-white"
+              >
+                <Plus className="h-4 w-4" aria-hidden /> Add task
+              </button>
             </section>
           ))}
         </div>
-
-        <DragOverlay>
-          {activeTask ? <BoardCard task={activeTask} clientId={clientId} dragging /> : null}
+        <DragOverlay dropAnimation={{ duration: 180, easing: "cubic-bezier(0.2, 0, 0, 1)" }}>
+          {activeTask ? <BoardCardOverlay task={activeTask} clientId={clientId} /> : null}
         </DragOverlay>
       </DndContext>
 
       {children}
 
-      {menuOpen && (
-        <div
-          className="sq-panel sq-section"
-          style={{
-            position: "absolute",
-            left: 24,
-            bottom: 84,
-            zIndex: 12,
-            width: 260,
-          }}
-        >
-          <div className="sq-eyebrow">{clientName}</div>
-          <AgentNote>
-            Squirrl can create this week’s tasks from the cadence, move approved work to Done, or
-            tell you what has gone quiet.
-          </AgentNote>
-          <div className="sq-followup" style={{ marginTop: 12 }}>
-            <Link href="/approvals" className="sq-pill">
-              Approvals
-            </Link>
-            <Link href="/calendar" className="sq-pill">
-              Calendar
-            </Link>
-            <Link href="/studio" className="sq-pill">
-              Caption studio
-            </Link>
-          </div>
-        </div>
-      )}
-
-      <button
-        type="button"
-        className="sq-board-actions"
-        onClick={() => setMenuOpen((open) => !open)}
-        aria-expanded={menuOpen}
-        aria-label="Board actions"
+      <ModalShell
+        open={Boolean(creatingColumnId)}
+        onClose={() => !pending && setCreatingColumnId(null)}
+        title="Create task"
+        description={`Add work to ${board.find((column) => column.id === creatingColumnId)?.name ?? "this board"}.`}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setCreatingColumnId(null)}
+              disabled={pending}
+              className="h-11 rounded-xl border border-line bg-white px-4 text-sm font-medium text-ink hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={pending || !draft.trim() || !draftDueDate}
+              onClick={submitTask}
+              className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm hover:bg-[#185be0] disabled:opacity-50"
+            >
+              {pending ? "Creating…" : "Create task"}
+            </button>
+          </>
+        }
       >
-        ☷
-      </button>
-
-      <LiveOrb
-        compact
-        state={live.state}
-        level={live.inputLevel}
-        onToggle={toggleVoice}
-        activeTool={live.activeTool}
-      />
-    </main>
+        <div className="space-y-5">
+          <label className="block">
+            <span className={modalLabelClass}>Task title</span>
+            <input
+              autoFocus
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && submitTask()}
+              className={modalInputClass}
+              placeholder="What needs to get done?"
+            />
+          </label>
+          <label className="block">
+            <span className={modalLabelClass}>Due date</span>
+            <input
+              required
+              type="date"
+              value={draftDueDate}
+              onChange={(event) => setDraftDueDate(event.target.value)}
+              className={modalInputClass}
+            />
+          </label>
+          {categories.length > 0 && (
+            <label className="block">
+              <span className={modalLabelClass}>Category</span>
+              <select
+                value={draftCategory}
+                onChange={(event) => setDraftCategory(event.target.value)}
+                className={modalInputClass}
+              >
+                <option value="">No category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+      </ModalShell>
+    </div>
   );
 }

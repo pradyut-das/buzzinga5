@@ -34,7 +34,7 @@ export function AgentSpark() {
 
 /**
  * The two ambient characters on the homepage. They make the agent's proactive
- * roles legible before the founder says anything: one watches the approval
+ * roles legible before the founder says anything: one watches the review
  * queue, the other collects ideas from research.
  */
 export function AmbientSquirrl({ side, label }: { side: "one" | "two"; label: string }) {

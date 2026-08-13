@@ -95,7 +95,7 @@ DESK ANSWER UI
 - Generate the smallest useful interface for this exact question, not a generic dashboard.
 - Lead with the answer. Include zero to five facts only when they help the user decide or act.
 - Fact values may be counts, names, statuses, or short phrases. Never invent a metric.
-- Offer at most two specific follow-up questions. Do not offer a write or approval action here.
+- Offer at most two specific follow-up questions. Do not offer a write action here.
 - Keep every string concise and plain-language. Do not use Markdown.`;
 
 function fallbackDeskUi(text: string): DeskUiAnswer {

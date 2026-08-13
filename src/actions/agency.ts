@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  approvals,
   assets,
   boards,
   broadcasts,
@@ -15,6 +14,7 @@ import {
   comments,
   contributors,
   scheduledPosts,
+  taskCategories,
   tasks,
   topics,
 } from "@/db/schema";
@@ -34,73 +34,9 @@ async function requireUser() {
 
 function revalidateAgency(clientId?: string) {
   revalidatePath("/");
-  revalidatePath("/approvals");
   revalidatePath("/health");
   revalidatePath("/calendar");
   if (clientId) revalidatePath(`/clients/${clientId}`);
-}
-
-export async function decideApproval(
-  approvalId: string,
-  decision: "approved" | "changes_requested",
-  note?: string,
-) {
-  const user = await requireUser();
-  const approval = await db.query.approvals.findFirst({ where: eq(approvals.id, approvalId) });
-  if (!approval) throw new Error("That approval no longer exists");
-
-  await db
-    .update(approvals)
-    .set({
-      state: decision,
-      decidedAt: new Date(),
-      decidedById: user.id,
-      decisionNote: note?.trim() || null,
-    })
-    .where(eq(approvals.id, approvalId));
-
-  // An approved asset is ready to publish; a change request sends the task
-  // back to production, which is where the work actually resumes.
-  const asset = await db.query.assets.findFirst({ where: eq(assets.id, approval.assetId) });
-  if (asset?.taskId) {
-    const task = await db.query.tasks.findFirst({ where: eq(tasks.id, asset.taskId) });
-    if (task) {
-      const boardColumns = await db.query.columns.findMany({
-        where: eq(columns.boardId, task.boardId),
-      });
-      const target = boardColumns.find((column) =>
-        decision === "approved"
-          ? /done/i.test(column.name)
-          : /production|progress|doing/i.test(column.name),
-      );
-      if (target) {
-        await db.update(tasks).set({ columnId: target.id }).where(eq(tasks.id, task.id));
-      }
-    }
-    if (decision === "approved") {
-      await db
-        .update(scheduledPosts)
-        .set({ state: "scheduled" })
-        .where(eq(scheduledPosts.taskId, asset.taskId));
-    }
-  }
-
-  revalidateAgency(approval.clientId);
-  return { ok: true };
-}
-
-export async function addReviewNote(approvalId: string, body: string, slideIndex?: number) {
-  const user = await requireUser();
-  const { reviewNotes } = await import("@/db/schema");
-  await db.insert(reviewNotes).values({
-    id: randomUUID(),
-    approvalId,
-    slideIndex: slideIndex ?? null,
-    author: user.name,
-    source: "agency",
-    body: body.trim(),
-  });
-  revalidatePath(`/approvals/${approvalId}`);
 }
 
 export async function moveTask(taskId: string, columnId: string) {
@@ -109,7 +45,9 @@ export async function moveTask(taskId: string, columnId: string) {
   if (!task) throw new Error("Task not found");
 
   await db.update(tasks).set({ columnId }).where(eq(tasks.id, taskId));
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, task.boardId) });
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, task.boardId),
+  });
   revalidateAgency(board?.clientId ?? undefined);
 }
 
@@ -118,14 +56,29 @@ export async function createTask(
   title: string,
   columnIndex = 0,
   categoryId: string | null = null,
+  dueDate: string | null = null,
 ) {
   await requireUser();
-  const board = await db.query.boards.findFirst({ where: eq(boards.clientId, clientId) });
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.clientId, clientId),
+  });
   if (!board) throw new Error("This client has no board");
 
-  const boardColumns = await db.query.columns.findMany({ where: eq(columns.boardId, board.id) });
+  const boardColumns = await db.query.columns.findMany({
+    where: eq(columns.boardId, board.id),
+  });
   const column = boardColumns.find((entry) => entry.position === columnIndex) ?? boardColumns[0];
   if (!column) throw new Error("This board has no columns");
+
+  if (categoryId) {
+    const category = await db.query.taskCategories.findFirst({
+      where: and(eq(taskCategories.id, categoryId), eq(taskCategories.boardId, board.id)),
+    });
+    if (!category) throw new Error("That category is not on this client's board");
+  }
+
+  const dueAt = dueDate ? new Date(`${dueDate}T23:59:59`) : null;
+  if (dueAt && Number.isNaN(dueAt.getTime())) throw new Error("Invalid date");
 
   const id = randomUUID();
   await db.insert(tasks).values({
@@ -138,6 +91,7 @@ export async function createTask(
     clientId,
     priority: "none",
     position: Date.now() % 100000,
+    dueAt,
   });
 
   revalidateAgency(clientId);
@@ -161,7 +115,13 @@ export async function addTaskComment(taskId: string, body: string) {
       name: user.name,
       color: "amber",
     });
-    author = { id, boardId: task.boardId, name: user.name, email: null, color: "amber" };
+    author = {
+      id,
+      boardId: task.boardId,
+      name: user.name,
+      email: null,
+      color: "amber",
+    };
   }
 
   await db.insert(comments).values({
@@ -172,14 +132,18 @@ export async function addTaskComment(taskId: string, body: string) {
     content: body.trim(),
   });
 
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, task.boardId) });
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, task.boardId),
+  });
   revalidatePath(`/clients/${board?.clientId}/tasks/${taskId}`);
 }
 
 /** Turns a research signal into real work on the client's board. */
 export async function createBriefFromTopic(topicId: string) {
   await requireUser();
-  const topic = await db.query.topics.findFirst({ where: eq(topics.id, topicId) });
+  const topic = await db.query.topics.findFirst({
+    where: eq(topics.id, topicId),
+  });
   if (!topic?.clientId) throw new Error("That topic has no client");
 
   const taskId = await createTask(topic.clientId, `Brief: ${topic.title}`, 0);
@@ -200,7 +164,9 @@ export async function dismissTopic(topicId: string) {
 /** Attaches a finished caption to the task that will publish it. */
 export async function attachCaption(draftId: string, finalBody: string, selectedIndex: number) {
   await requireUser();
-  const draft = await db.query.captionDrafts.findFirst({ where: eq(captionDrafts.id, draftId) });
+  const draft = await db.query.captionDrafts.findFirst({
+    where: eq(captionDrafts.id, draftId),
+  });
   if (!draft) throw new Error("Draft not found");
 
   await db
@@ -256,7 +222,9 @@ export async function renameTask(taskId: string, title: string) {
   const task = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!task) throw new Error("Task not found");
   await db.update(tasks).set({ title: title.trim() }).where(eq(tasks.id, taskId));
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, task.boardId) });
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, task.boardId),
+  });
   revalidateAgency(board?.clientId ?? undefined);
 }
 
@@ -271,7 +239,9 @@ export async function setTaskDueDate(taskId: string, date: string | null) {
   if (dueAt && Number.isNaN(dueAt.getTime())) throw new Error("Invalid date");
 
   await db.update(tasks).set({ dueAt }).where(eq(tasks.id, taskId));
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, task.boardId) });
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, task.boardId),
+  });
   revalidateAgency(board?.clientId ?? undefined);
 }
 

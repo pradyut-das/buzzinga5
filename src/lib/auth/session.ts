@@ -9,7 +9,7 @@ export type SessionUser = Pick<User, "id" | "email" | "name">;
 /**
  * Supabase Auth owns identity and sessions. The local `users` table is a
  * mirror, keyed by the Supabase user id, because `boards.ownerId`,
- * `boardMembers.userId` and `approvals.decidedById` all foreign-key to it.
+ * `boardMembers.userId` and historical decision rows all foreign-key to it.
  *
  * The row is created on first sight rather than by a signup hook, so a user
  * created directly in the Supabase dashboard still works on their first visit.

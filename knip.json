@@ -5,6 +5,7 @@
     "drizzle/**",
     ".next/**",
     "screens/capture-creator-desk-v2.mjs",
-    "screens/capture-actual-squirrl.mjs"
+    "screens/capture-actual-squirrl.mjs",
+    "scripts/cleanup-home-plasma-qa.ts"
   ]
 }

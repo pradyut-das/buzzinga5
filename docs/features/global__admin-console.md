@@ -32,7 +32,7 @@ set only changes with a deploy, so a compromised account cannot promote anyone. 
 - Add: name, initials (2 letters), color, account manager, cadence → `Add client`
 - Edit: same fields inline
 - `Archive` hides a client from the rail and leaves all their work readable; `Restore` undoes it
-- `Delete` asks for the client name back, then removes their boards, assets, approvals, caption
+- `Delete` asks for the client name back, then removes their boards, assets, caption
   drafts, scheduled posts, communities and topics
 
 ### Boards

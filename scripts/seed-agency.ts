@@ -1,7 +1,7 @@
 /**
  * Seeds the demo content agency the v2 screens were designed against:
- * four clients, their content boards, the approval queue, WhatsApp
- * communities, Instagram topic signals, caption drafts and a publishing week.
+ * four clients, their content boards, assets, WhatsApp communities, Instagram
+ * topic signals, caption drafts and a publishing week.
  *
  * Safe to re-run: it clears the agency tables first, then rebuilds them. The
  * founder account is upserted, never duplicated.
@@ -360,15 +360,14 @@ async function main() {
     }
   }
 
-  // Assets and the approval queue the homepage orbits around.
-  const queue: {
+  // Assets available to task workspaces and the caption studio.
+  const assetSeed: {
     client: string;
     task: string;
     kind: AssetKind;
     title: string;
     accent: string;
     ageHours: number;
-    reason: string;
     slides?: number;
     seconds?: number;
     body?: string;
@@ -380,7 +379,6 @@ async function main() {
       title: "The 4 habits that make teams move",
       accent: "#245f86",
       ageHours: 2,
-      reason: "Blocks two carousel variants waiting on the same hook.",
       slides: 7,
     },
     {
@@ -390,7 +388,6 @@ async function main() {
       title: "Barrier repair, explained",
       accent: "#8f466f",
       ageHours: 4,
-      reason: "Most time-sensitive: publishes tomorrow morning.",
       seconds: 27,
     },
     {
@@ -400,7 +397,6 @@ async function main() {
       title: "A table worth crossing town for",
       accent: "#a55323",
       ageHours: 26,
-      reason: "Caption has no owner and the shoot is already edited.",
       body:
         "Some tables are worth the detour. Ours takes 40 minutes to reach and about " +
         "four seconds to justify. Book Thursday — the pass menu changes at seven.",
@@ -412,7 +408,6 @@ async function main() {
       title: "“Can we make this less technical?”",
       accent: "#326f72",
       ageHours: 0.5,
-      reason: "Client reply waiting on a decision before the rewrite.",
       body: "Remote work doesn’t fail from distance. It fails from ambiguity.",
     },
     {
@@ -422,7 +417,6 @@ async function main() {
       title: "Skin cycling, without the fatigue",
       accent: "#65378f",
       ageHours: 12,
-      reason: "Slide 5 makes a claim the source pack does not support.",
       slides: 6,
     },
     {
@@ -432,14 +426,14 @@ async function main() {
       title: "Runway maths, in ninety seconds",
       accent: "#2f6b45",
       ageHours: 9,
-      reason: "Client feedback SLA expires in under an hour.",
       seconds: 92,
     },
   ];
 
-  let firstApprovalId = "";
-  for (const item of queue) {
+  let firstAssetId = "";
+  for (const item of assetSeed) {
     const assetId = randomUUID();
+    firstAssetId ||= assetId;
     await db.insert(assets).values({
       id: assetId,
       clientId: clientIds[item.client],
@@ -452,24 +446,13 @@ async function main() {
       body: item.body ?? null,
       createdAt: hoursAgo(item.ageHours),
     });
-
-    const approvalId = randomUUID();
-    firstApprovalId ||= approvalId;
-    await db.insert(approvals).values({
-      id: approvalId,
-      assetId,
-      clientId: clientIds[item.client],
-      state: "pending",
-      reason: item.reason,
-      dueAt: daysAhead(1, 9),
-      createdAt: hoursAgo(item.ageHours),
-    });
   }
 
   await db.insert(reviewNotes).values([
     {
       id: randomUUID(),
-      approvalId: firstApprovalId,
+      approvalId: null,
+      assetId: firstAssetId,
       slideIndex: 5,
       author: "Squirrl",
       source: "agent",
@@ -478,7 +461,8 @@ async function main() {
     },
     {
       id: randomUUID(),
-      approvalId: firstApprovalId,
+      approvalId: null,
+      assetId: firstAssetId,
       author: "Mira K.",
       source: "agency",
       body: "New cut uploaded with a softer opening.",
@@ -486,7 +470,8 @@ async function main() {
     },
     {
       id: randomUUID(),
-      approvalId: firstApprovalId,
+      approvalId: null,
+      assetId: firstAssetId,
       author: "Client",
       source: "client",
       body: "Keep the science, make it warmer.",
@@ -657,7 +642,7 @@ async function main() {
   }
 
   console.log(
-    `Seeded ${CLIENTS.length} clients, ${queue.length} approvals, and a publishing week.`,
+    `Seeded ${CLIENTS.length} clients, ${assetSeed.length} assets, and a publishing week.`,
   );
   console.log(`Founder login: ${FOUNDER_EMAIL}`);
 }

@@ -117,7 +117,7 @@ export function CaptionStudio({
             </div>
           </>
         ) : (
-          <EmptyState title="No asset selected" hint="Approvals feed this list." />
+          <EmptyState title="No asset selected" hint="Add an asset to a client task first." />
         )}
 
         <div className="sq-field">

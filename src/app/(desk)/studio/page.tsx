@@ -1,14 +1,14 @@
 import { CaptionStudio } from "@/components/sq/caption-studio";
 import { WorkspaceHeader } from "@/components/sq/workspace";
-import { listApprovals, listCaptionDrafts, listClients } from "@/lib/agency/queries";
+import { listCaptionDrafts, listClients, listStudioAssets } from "@/lib/agency/queries";
 
 export const dynamic = "force-dynamic";
 
 export default async function StudioPage() {
-  const [drafts, clients, approvals] = await Promise.all([
+  const [drafts, clients, assets] = await Promise.all([
     listCaptionDrafts(),
     listClients(),
-    listApprovals("pending"),
+    listStudioAssets(),
   ]);
 
   return (
@@ -16,13 +16,13 @@ export default async function StudioPage() {
       <WorkspaceHeader crumb="Create / Caption studio" action="Generate new variants" />
       <CaptionStudio
         clients={clients.map((client) => ({ id: client.id, name: client.name }))}
-        sources={approvals.slice(0, 12).map((approval) => ({
-          assetId: approval.assetId,
-          title: approval.title,
-          clientId: approval.clientId,
-          clientName: approval.clientName,
-          accent: approval.accent,
-          kind: approval.kind,
+        sources={assets.slice(0, 12).map(({ asset, client }) => ({
+          assetId: asset.id,
+          title: asset.title,
+          clientId: client.id,
+          clientName: client.name,
+          accent: asset.accent,
+          kind: asset.kind,
         }))}
         drafts={drafts.map(({ draft, client, asset }) => ({
           id: draft.id,

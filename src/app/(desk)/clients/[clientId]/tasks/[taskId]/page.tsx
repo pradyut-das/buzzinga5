@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ClientBoard } from "@/components/sq/client-board";
 import { TaskWorkspace } from "@/components/task/task-workspace";
 import { getClientBoard, getTaskWorkspace } from "@/lib/agency/queries";
+import "@/styles/desk-v2.css";
 
 export const dynamic = "force-dynamic";
 
@@ -32,9 +33,13 @@ export default async function TaskPage({
       clientName={board.client.name}
       cadence={board.client.cadence}
       contact={board.client.contact}
+      nextDeadline={board.client.nextDeadlineAt?.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}
       columns={board.columns}
       categories={board.categories.map(category)}
-      dimmed
     >
       <TaskWorkspace
         task={{

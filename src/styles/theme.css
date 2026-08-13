@@ -42,28 +42,33 @@
   /* Glassmorphism */
   --color-glass: var(--glass);
   --color-glass-border: var(--glass-border);
+  --color-ink: #0b1020;
+  --color-line: #e9edf3;
+  --color-canvas: #fafbfc;
+  --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.055);
+  --shadow-modal: 0 24px 70px rgba(15, 23, 42, 0.16);
 }
 
 :root {
   --radius: 0.875rem;
-  --background: #f5f5f7;
-  --foreground: #1d1d1f;
+  --background: #fafbfc;
+  --foreground: #0b1020;
   --card: #ffffff;
   --card-foreground: #1d1d1f;
   --popover: rgb(255 255 255 / 88%);
   --popover-foreground: #1d1d1f;
-  --primary: #0071e3;
+  --primary: #2168f5;
   --primary-foreground: #ffffff;
   --secondary: #e8e8ed;
   --secondary-foreground: #1d1d1f;
   --muted: #eeeef0;
-  --muted-foreground: #6e6e73;
+  --muted-foreground: #667085;
   --accent: #e8f2ff;
   --accent-foreground: #005bbf;
   --destructive: #d70015;
   --border: rgb(0 0 0 / 10%);
   --input: rgb(0 0 0 / 14%);
-  --ring: rgb(0 113 227 / 42%);
+  --ring: rgb(33 104 245 / 42%);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);

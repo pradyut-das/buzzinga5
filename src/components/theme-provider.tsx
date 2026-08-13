@@ -7,7 +7,7 @@ import { QueryProvider } from "@/lib/query-client";
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   return (
     <QueryProvider>
-      <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
+      <NextThemesProvider attribute="class" forcedTheme="light" enableSystem={false}>
         {children}
         <Toaster />
       </NextThemesProvider>

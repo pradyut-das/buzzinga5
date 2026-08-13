@@ -1,10 +1,14 @@
 # ADR 006: Mobile Responsiveness
 
-Mobile-first layouts with Tailwind breakpoints; use `lg` for multi-panel/side-by-side layouts when there is room.
+Mobile-first layouts use the Squirrl reference breakpoints. The persistent 240px
+sidebar appears at `lg`; below `lg`, navigation is a 270px modal drawer opened
+from the 82px utility header.
 
 - Stack by default; switch to rows at `lg` when panels need width
 - Prefer one scroll container on mobile; allow split scroll areas on desktop
 - Keep touch targets usable and avoid horizontal scroll on small screens
+- Kanban boards and the month calendar are intentional horizontal scroll
+  regions; the page itself must not overflow horizontally
 - Sanity-check at 375px, 768px, and ~1280px before shipping
 
 ## Examples

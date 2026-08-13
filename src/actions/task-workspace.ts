@@ -49,7 +49,6 @@ async function revalidateTask(taskId: string) {
     revalidatePath(`/clients/${clientId}/tasks/${taskId}`);
   }
   revalidatePath("/");
-  revalidatePath("/approvals");
 }
 
 // ── Task facts ────────────────────────────────────────────────────────────

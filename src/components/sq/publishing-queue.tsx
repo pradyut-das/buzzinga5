@@ -17,7 +17,7 @@ interface Post {
 
 /**
  * Publishing is a user-confirmed step: nothing here goes out on its own, so
- * the queue shows what is ready, what is waiting on an approval, and lets the
+ * the queue shows what is ready, what is still in review, and lets the
  * founder push a date or mark something published.
  */
 export function PublishingQueue({ posts }: { posts: Post[] }) {
@@ -103,7 +103,7 @@ export function PublishingQueue({ posts }: { posts: Post[] }) {
         <SectionHead eyebrow="Ready to go out" title={`${ready.length} scheduled`} />
         <AgentNote>
           Squirrl never publishes on its own. It can tell you what is blocked, reschedule around a
-          collision, or chase the approval a post is waiting on.
+          collision, or follow up on a post that is still in review.
         </AgentNote>
         <div style={{ marginTop: 12 }}>
           {ready.map(row)}

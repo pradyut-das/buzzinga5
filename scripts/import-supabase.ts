@@ -7,7 +7,7 @@
  *   clients        → clients + one content board each (a board *is* a client)
  *   profiles       → contributors on every board they touch, role kept
  *   tasks.status   → the board column (todo / progress / review / done)
- *   tasks.approval → an approval + an asset for anything awaiting a decision
+ *   review tasks    → assets that remain attached to their source task
  *   tasks.*_date   → a scheduled post, so the calendar shows real going-out days
  *   task_activity  → comments on the task, in order
  *
@@ -334,7 +334,6 @@ async function main() {
   const taskIdMap = new Map<string, string>();
   const positionPerColumn = new Map<string, number>();
 
-  let approvalCount = 0;
   let postCount = 0;
 
   for (const [index, sbTask] of sbTasks.entries()) {
@@ -371,9 +370,9 @@ async function main() {
     const cadence = cadenceByClient.get(sbTask.client_id) ?? null;
     const kind = assetKindFor(sbTask.title, cadence);
 
-    // Everything past production has a deliverable; that deliverable is what
-    // the founder approves, so it becomes an asset plus a pending approval.
-    if (AWAITING_DECISION.has(sbTask.status) && sbTask.approval === "pending") {
+    // Everything past production has a deliverable, stored directly as an
+    // asset attached to its source task.
+    if (AWAITING_DECISION.has(sbTask.status)) {
       const assetId = randomUUID();
       await db.insert(assets).values({
         id: assetId,
@@ -387,20 +386,6 @@ async function main() {
         body: sbTask.description?.trim() || null,
         createdAt: sbTask.updated_at ? new Date(sbTask.updated_at) : createdAt,
       });
-
-      await db.insert(approvals).values({
-        id: randomUUID(),
-        assetId,
-        clientId,
-        state: "pending",
-        reason:
-          sbTask.status === "review"
-            ? "In review — waiting on your decision."
-            : "Edit finished and waiting for sign-off before it goes out.",
-        dueAt: sbTask.going_out_date ? new Date(`${sbTask.going_out_date}T09:00:00`) : null,
-        createdAt: sbTask.updated_at ? new Date(sbTask.updated_at) : createdAt,
-      });
-      approvalCount += 1;
     }
 
     // Going-out dates are the publishing calendar.
@@ -450,7 +435,7 @@ async function main() {
   }
 
   console.log(
-    `Imported ${sbClients.length} clients, ${taskIdMap.size} tasks, ${approvalCount} approvals, ${postCount} scheduled posts, ${commentCount} comments.`,
+    `Imported ${sbClients.length} clients, ${taskIdMap.size} tasks, ${postCount} scheduled posts, ${commentCount} comments.`,
   );
   console.log(`Founder login: ${FOUNDER_EMAIL}`);
 }

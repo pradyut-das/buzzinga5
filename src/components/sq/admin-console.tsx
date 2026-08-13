@@ -402,8 +402,8 @@ function ClientsPanel({
         </tbody>
       </table>
       <p className="sq-tiny">
-        Deleting a client also deletes its boards, assets, approvals, posts and communities. Archive
-        instead when the work should stay readable.
+        Deleting a client also deletes its boards, assets, posts, and communities. Archive instead
+        when the work should stay readable.
       </p>
     </section>
   );

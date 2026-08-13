@@ -1,34 +1,30 @@
-# Feature: Board Sidebar
+# Feature: Application sidebar on board routes
 
 ## Overview
 
-A persistent sidebar on every `/boards/*` page listing the boards the signed-in user belongs to.
+Direct `/boards/*` routes use the same Squirrl Agency OS application shell as
+the client, calendar, notification, and settings routes. There is no
+separate board-list sidebar.
 
 ## User Flows
 
-### Browse Boards
+### Navigate from a board
 
-- Sidebar is visible on desktop for all `/boards/*` routes (hidden below `md`; the board header hamburger menu remains the mobile navigation)
-- Below a `Boards` heading, each board links to `/boards/{uuid}`
-- The board matching the current URL is highlighted
-- Boards the user is a member of, newest board first
+- Desktop shows the fixed 240px application sidebar.
+- The only items are `Home`, `Clients`, `Calendar`, `Notifications`, and
+  `Settings`.
+- `Clients` is active on both `/clients/*` and `/boards/*` routes.
+- On screens below `lg`, `Open menu` reveals the same navigation in a 270px
+  drawer.
 
-### Collapse the Sidebar
+### Access board functions
 
-- Click the collapse button in the sidebar header
-- Collapsed sidebar shows icons only
-- The choice is stored in localStorage under `itacorubi:sidebar-collapsed` and survives navigation and reloads
-
-### Create a Board
-
-- Click `New board` at the bottom of the sidebar
-- Opens the same create-board dialog as the homepage
-
-### Account Actions
-
-- The signed-in user's name is shown above a `Sign out` button
+- Direct board URLs continue to enforce authentication, membership, and board
+  password access.
+- Board CRUD, task CRUD, contributors, tags, comments, local-first Zustand
+  state, polling, and outbox synchronization remain inside the board surface.
 
 ## Notes
 
-- `BoardSidebar` (server) reads the session and membership; `BoardSidebarClient` renders and handles collapse state
-- Lives in `src/app/boards/layout.tsx` so board pages, the unlock page and the emails pages all share it
+- The legacy collapsible board list and its localStorage collapsed state are no
+  longer rendered.

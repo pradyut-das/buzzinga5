@@ -1,41 +1,66 @@
 "use client";
 
-import Link from "next/link";
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { format, parseISO } from "date-fns";
+import { GripVertical } from "lucide-react";
+import Link from "next/link";
 import type { BoardColumnView } from "@/lib/agency/queries";
 
 type Task = BoardColumnView["tasks"][number];
 
-/**
- * A deadline only earns colour once it is close: today and overdue read red,
- * the next three days amber, anything further out stays quiet.
- */
-export function DueTag({ due }: { due: string }) {
-  const date = new Date(due);
-  const days = Math.ceil((date.getTime() - Date.now()) / 86_400_000);
-  const label =
-    days < 0
-      ? `${Math.abs(days)}d overdue`
-      : days === 0
-        ? "Due today"
-        : days === 1
-          ? "Due tomorrow"
-          : `Due ${date.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}`;
+function CardSurface({
+  task,
+  clientId,
+  overlay = false,
+  dragHandle,
+}: {
+  task: Task;
+  clientId: string;
+  overlay?: boolean;
+  dragHandle?: React.ReactNode;
+}) {
+  const assignee = task.assignees[0];
 
   return (
-    <span className={`sq-tag sq-due${days < 0 ? " is-late" : days <= 3 ? " is-soon" : ""}`}>
-      {label}
-    </span>
+    <div
+      className={`relative w-full rounded-[14px] border bg-white transition-[border-color,box-shadow,transform] duration-150 ${
+        overlay
+          ? "border-[#c7d7f6] shadow-modal"
+          : "border-line shadow-[0_2px_10px_rgba(15,23,42,.025)] hover:-translate-y-px hover:border-[#d8e2f1] hover:shadow-soft"
+      }`}
+    >
+      <Link
+        href={`/clients/${clientId}/tasks/${task.id}`}
+        draggable={false}
+        className="block w-full rounded-[14px] p-4 pr-12 text-left"
+        onClick={overlay ? (event) => event.preventDefault() : undefined}
+      >
+        <div className="text-[15px] font-semibold leading-[1.375rem] text-ink">{task.title}</div>
+        {task.category && (
+          <span
+            className="mt-3 inline-flex rounded-md border-l-[3px] px-2 py-1 text-[11px] font-medium capitalize text-[#475467]"
+            style={{
+              backgroundColor: `${task.category.color}14`,
+              borderLeftColor: task.category.color,
+            }}
+          >
+            {task.category.name}
+          </span>
+        )}
+        <div className="mt-4 flex items-center gap-2 text-xs text-muted">
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600">
+            {assignee?.initials ?? "—"}
+          </span>
+          <span>{task.dueAt ? format(parseISO(task.dueAt), "MMM d") : "No date"}</span>
+        </div>
+      </Link>
+      {dragHandle}
+    </div>
   );
 }
 
-/**
- * A task card is both a link and a drag handle. The sensor only starts a drag
- * after 8px of movement, so a click still opens the task — the same
- * activation constraint the old board used.
- */
 export function BoardCard({
   task,
   clientId,
@@ -45,59 +70,56 @@ export function BoardCard({
   clientId: string;
   dragging?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: task.id,
-    data: { type: "task" },
-  });
-
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id, data: { type: "task" } });
   return (
     <div
       ref={setNodeRef}
       style={{
         transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
+        transition: transition ?? "transform 180ms cubic-bezier(0.2, 0, 0, 1)",
+        opacity: isDragging ? 0.18 : 1,
+        zIndex: isDragging ? 1 : undefined,
       }}
-      {...attributes}
-      {...listeners}
+      data-kanban-task-id={task.id}
+      className="rounded-[14px]"
     >
-      <Link
-        href={`/clients/${clientId}/tasks/${task.id}`}
-        className="sq-task"
-        style={
-          dragging ? { boxShadow: "0 18px 40px rgba(20,16,20,.3)", cursor: "grabbing" } : undefined
+      <CardSurface
+        task={task}
+        clientId={clientId}
+        overlay={dragging}
+        dragHandle={
+          <button
+            ref={setActivatorNodeRef}
+            type="button"
+            aria-label={`Drag ${task.title}`}
+            className="absolute right-1.5 top-1.5 grid h-11 w-11 cursor-grab touch-none place-items-center rounded-xl text-slate-400 outline-none transition hover:bg-slate-50 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-primary/30 active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" aria-hidden />
+          </button>
         }
-        draggable={false}
-      >
-        <b>{task.title}</b>
-        <small>
-          {task.hasMedia ? "Media · " : ""}
-          {task.quietDays}d quiet
-        </small>
-        <span className="sq-task-foot">
-          <span className="sq-card-flags">
-            {task.category && (
-              <span className="sq-tag" style={{ borderColor: task.category.color }}>
-                {task.category.name}
-              </span>
-            )}
-            {task.priority === "high" && <span className="sq-tag">High</span>}
-            {task.dueAt && <DueTag due={task.dueAt} />}
-          </span>
-          <span className="sq-faces">
-            {task.assignees.map((person) => (
-              <i key={person.name} className="sq-face" title={person.name}>
-                {person.initials}
-              </i>
-            ))}
-          </span>
-        </span>
-      </Link>
+      />
     </div>
   );
 }
 
-/** The column body is the drop target, so an empty column still accepts a card. */
+export function BoardCardOverlay({ task, clientId }: { task: Task; clientId: string }) {
+  return (
+    <div className="w-[270px] rotate-[0.6deg] scale-[1.02]">
+      <CardSurface task={task} clientId={clientId} overlay />
+    </div>
+  );
+}
+
 export function ColumnDropZone({
   columnId,
   children,
@@ -113,13 +135,10 @@ export function ColumnDropZone({
   return (
     <div
       ref={setNodeRef}
-      style={{
-        flex: 1,
-        minHeight: 80,
-        borderRadius: 12,
-        outline: isOver ? "1px dashed var(--amber)" : "none",
-        outlineOffset: 4,
-      }}
+      data-kanban-column-id={columnId}
+      className={`min-h-24 space-y-3 rounded-xl p-1 transition-[background-color,box-shadow] duration-150 ${
+        isOver ? "bg-[#edf4ff] shadow-[inset_0_0_0_1px_rgba(37,99,235,.14)]" : ""
+      }`}
     >
       {children}
     </div>

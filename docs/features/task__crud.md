@@ -14,6 +14,30 @@ Tasks are the individual work items that live within columns. Each task can have
 - URL updates to `/boards/{boardId}?task={taskId}`
 - Created at date is set automatically
 
+### Create Task from a Client Board
+
+- `Create` in the client header targets the first board column; `Add task`
+  targets the selected column.
+- Enter a title, required due date, and optional board category.
+- `Create` on `/calendar` uses the same title, client, due date, and optional
+  board-category fields; changing the client refreshes the category choices to
+  that client's board vocabulary.
+- The task and due date are written together, so the new task immediately
+  appears on both the client board and `/calendar`.
+- Older board tasks without a due date remain visible in Calendar under
+  `Unscheduled` until a date is assigned.
+
+### Schedule an Unscheduled Task
+
+- Open `/calendar` and use an unscheduled task's drag handle to drop it onto
+  any visible date.
+- The task moves into the target day immediately while the authenticated due
+  date mutation runs in the background.
+- The target day highlights during the drag and a compact task preview follows
+  the pointer; touch uses a short hold to avoid fighting page scrolling.
+- A success toast confirms the date. If persistence fails, the task returns to
+  `Unscheduled` and an error toast explains that it was not scheduled.
+
 ### View Task
 
 - Click on task card in the board
@@ -39,7 +63,13 @@ Tasks are the individual work items that live within columns. Each task can have
 
 - Drag task card from one column to another
 - Can drop into empty columns
-- Optimistic UI updates for smooth animation
+- The card follows a lightweight overlay and moves into the hovered column
+  before release, so neighboring cards animate out of the way instead of
+  jumping after the drop.
+- Pointer, touch, and keyboard sensors are supported; edge dragging
+  auto-scrolls the horizontal board.
+- The move is optimistic. Cancelling or a failed authenticated write restores
+  the exact pre-drag board and a failed write shows an error toast.
 
 ### Move Task (Sidebar)
 

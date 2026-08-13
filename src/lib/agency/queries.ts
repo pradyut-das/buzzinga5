@@ -1,7 +1,6 @@
-import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  approvals,
   assets,
   boards,
   captionDrafts,
@@ -12,6 +11,7 @@ import {
   broadcasts,
   contributors,
   integrationSyncs,
+  pendingNotifications,
   reviewNotes,
   scheduledPosts,
   tasks,
@@ -20,8 +20,6 @@ import {
   taskCollaborators,
   taskStakeholders,
   topics,
-  type ApprovalState,
-  type AssetKind,
   type AssetSlide,
   type TaskStatus,
 } from "@/db/schema";
@@ -39,7 +37,6 @@ export interface ClientSummary {
   initials: string;
   color: string;
   boardId: string | null;
-  pendingApprovals: number;
   openTasks: number;
   health: "good" | "watch" | "risk";
   nextDeadlineAt: Date | null;
@@ -53,12 +50,8 @@ export async function listClients(): Promise<ClientSummary[]> {
   if (!rows.length) return [];
 
   const ids = rows.map((row) => row.id);
-  const [boardRows, approvalRows, taskRows] = await Promise.all([
+  const [boardRows, taskRows] = await Promise.all([
     db.select().from(boards).where(inArray(boards.clientId, ids)),
-    db
-      .select({ clientId: approvals.clientId, id: approvals.id, createdAt: approvals.createdAt })
-      .from(approvals)
-      .where(and(inArray(approvals.clientId, ids), eq(approvals.state, "pending"))),
     db
       .select({ boardId: tasks.boardId, columnId: tasks.columnId })
       .from(tasks)
@@ -80,17 +73,11 @@ export async function listClients(): Promise<ClientSummary[]> {
 
   return rows.map((client) => {
     const board = boardRows.find((row) => row.clientId === client.id) ?? null;
-    const pending = approvalRows.filter((row) => row.clientId === client.id);
     const openTasks = board
       ? taskRows.filter((row) => row.boardId === board.id && !doneColumns.has(row.columnId)).length
       : 0;
 
-    // Health is the queue, not a guess: anything aging past a day is a risk.
-    const oldest = pending.reduce<number>((max, row) => {
-      const age = row.createdAt ? Date.now() - row.createdAt.getTime() : 0;
-      return Math.max(max, age);
-    }, 0);
-    const health = oldest > DAY_MS ? "risk" : pending.length > 2 ? "watch" : "good";
+    const health = openTasks > 12 ? "risk" : openTasks > 6 ? "watch" : "good";
 
     return {
       id: client.id,
@@ -98,90 +85,11 @@ export async function listClients(): Promise<ClientSummary[]> {
       initials: client.initials,
       color: client.color,
       boardId: board?.id ?? null,
-      pendingApprovals: pending.length,
       openTasks,
       health,
       nextDeadlineAt: client.nextDeadlineAt ?? null,
     };
   });
-}
-
-export interface ApprovalCard {
-  id: string;
-  assetId: string;
-  clientId: string;
-  clientName: string;
-  clientColor: string;
-  title: string;
-  kind: AssetKind;
-  accent: string | null;
-  thumbnailUrl: string | null;
-  blobUrl: string | null;
-  slideCount: number | null;
-  durationSeconds: number | null;
-  body: string | null;
-  reason: string | null;
-  state: ApprovalState;
-  ageLabel: string;
-  createdAt: Date | null;
-}
-
-function ageLabel(from: Date | null): string {
-  if (!from) return "just now";
-  const minutes = Math.max(1, Math.round((Date.now() - from.getTime()) / 60_000));
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.round(hours / 24);
-  return days === 1 ? "Yesterday" : `${days}d`;
-}
-
-export async function listApprovals(state: ApprovalState = "pending"): Promise<ApprovalCard[]> {
-  const rows = await db
-    .select({ approval: approvals, asset: assets, client: clients })
-    .from(approvals)
-    .innerJoin(assets, eq(approvals.assetId, assets.id))
-    .innerJoin(clients, eq(approvals.clientId, clients.id))
-    .where(eq(approvals.state, state))
-    .orderBy(asc(approvals.createdAt));
-
-  return rows.map(({ approval, asset, client }) => ({
-    id: approval.id,
-    assetId: asset.id,
-    clientId: client.id,
-    clientName: client.name,
-    clientColor: client.color,
-    title: asset.title,
-    kind: asset.kind,
-    accent: asset.accent,
-    thumbnailUrl: asset.thumbnailUrl,
-    blobUrl: asset.blobUrl,
-    slideCount: asset.slideCount,
-    durationSeconds: asset.durationSeconds,
-    body: asset.body,
-    reason: approval.reason,
-    state: approval.state,
-    ageLabel: ageLabel(approval.createdAt ?? null),
-    createdAt: approval.createdAt ?? null,
-  }));
-}
-
-export async function getApproval(approvalId: string) {
-  const row = await db
-    .select({ approval: approvals, asset: assets, client: clients })
-    .from(approvals)
-    .innerJoin(assets, eq(approvals.assetId, assets.id))
-    .innerJoin(clients, eq(approvals.clientId, clients.id))
-    .where(eq(approvals.id, approvalId))
-    .get();
-  if (!row) return null;
-
-  const notes = await db.query.reviewNotes.findMany({
-    where: eq(reviewNotes.approvalId, approvalId),
-    orderBy: [desc(reviewNotes.createdAt)],
-  });
-
-  return { ...row, notes, ageLabel: ageLabel(row.approval.createdAt ?? null) };
 }
 
 export interface BoardColumnView {
@@ -203,10 +111,14 @@ export interface BoardColumnView {
 }
 
 export async function getClientBoard(clientId: string) {
-  const client = await db.query.clients.findFirst({ where: eq(clients.id, clientId) });
+  const client = await db.query.clients.findFirst({
+    where: eq(clients.id, clientId),
+  });
   if (!client) return null;
 
-  const board = await db.query.boards.findFirst({ where: eq(boards.clientId, clientId) });
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.clientId, clientId),
+  });
   if (!board) {
     return {
       client,
@@ -227,7 +139,9 @@ export async function getClientBoard(clientId: string) {
         orderBy: [asc(tasks.position)],
       }),
       db.select().from(taskAssignees),
-      db.query.contributors.findMany({ where: eq(contributors.boardId, board.id) }),
+      db.query.contributors.findMany({
+        where: eq(contributors.boardId, board.id),
+      }),
       db.query.assets.findMany({ where: eq(assets.clientId, clientId) }),
       db.query.taskCategories.findMany({
         where: eq(taskCategories.boardId, board.id),
@@ -281,9 +195,13 @@ export async function getTaskDetail(taskId: string) {
   const task = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!task) return null;
 
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, task.boardId) });
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, task.boardId),
+  });
   const client = board?.clientId
-    ? await db.query.clients.findFirst({ where: eq(clients.id, board.clientId) })
+    ? await db.query.clients.findFirst({
+        where: eq(clients.id, board.clientId),
+      })
     : null;
 
   const [commentRows, contributorRows, assigneeRows, columnRows, assetRows, draftRows] =
@@ -292,7 +210,9 @@ export async function getTaskDetail(taskId: string) {
         where: eq(comments.taskId, taskId),
         orderBy: [desc(comments.createdAt)],
       }),
-      db.query.contributors.findMany({ where: eq(contributors.boardId, task.boardId) }),
+      db.query.contributors.findMany({
+        where: eq(contributors.boardId, task.boardId),
+      }),
       db.select().from(taskAssignees).where(eq(taskAssignees.taskId, taskId)),
       db.query.columns.findMany({
         where: eq(columns.boardId, task.boardId),
@@ -331,7 +251,9 @@ export async function getTaskWorkspace(taskId: string) {
   const task = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!task) return null;
 
-  const board = await db.query.boards.findFirst({ where: eq(boards.id, task.boardId) });
+  const board = await db.query.boards.findFirst({
+    where: eq(boards.id, task.boardId),
+  });
   const clientId = task.clientId ?? board?.clientId ?? null;
 
   const [
@@ -344,7 +266,9 @@ export async function getTaskWorkspace(taskId: string) {
     clientRows,
     categoryRows,
   ] = await Promise.all([
-    db.query.contributors.findMany({ where: eq(contributors.boardId, task.boardId) }),
+    db.query.contributors.findMany({
+      where: eq(contributors.boardId, task.boardId),
+    }),
     db.select().from(taskAssignees).where(eq(taskAssignees.taskId, taskId)),
     db.select().from(taskCollaborators).where(eq(taskCollaborators.taskId, taskId)),
     db.select().from(taskStakeholders).where(eq(taskStakeholders.taskId, taskId)),
@@ -356,7 +280,10 @@ export async function getTaskWorkspace(taskId: string) {
       where: eq(comments.taskId, taskId),
       orderBy: [desc(comments.createdAt)],
     }),
-    db.query.clients.findMany({ where: isNull(clients.archivedAt), orderBy: [asc(clients.name)] }),
+    db.query.clients.findMany({
+      where: isNull(clients.archivedAt),
+      orderBy: [asc(clients.name)],
+    }),
     db.query.taskCategories.findMany({
       where: eq(taskCategories.boardId, task.boardId),
       orderBy: [asc(taskCategories.position), asc(taskCategories.name)],
@@ -448,12 +375,93 @@ export async function listCaptionDrafts() {
     .orderBy(desc(captionDrafts.createdAt));
 }
 
+/** Assets are direct Studio inputs; no intermediary decision queue is required. */
+export async function listStudioAssets() {
+  return db
+    .select({ asset: assets, client: clients })
+    .from(assets)
+    .innerJoin(clients, eq(assets.clientId, clients.id))
+    .orderBy(desc(assets.createdAt));
+}
+
 export async function listScheduledPosts() {
   return db
     .select({ post: scheduledPosts, client: clients })
     .from(scheduledPosts)
     .innerJoin(clients, eq(scheduledPosts.clientId, clients.id))
     .orderBy(asc(scheduledPosts.scheduledAt));
+}
+
+/** Every real client-board task, including work that has not been scheduled yet. */
+export async function listCalendarTasks() {
+  return db
+    .select({ task: tasks, client: clients })
+    .from(tasks)
+    .innerJoin(boards, eq(tasks.boardId, boards.id))
+    .innerJoin(clients, eq(boards.clientId, clients.id))
+    .orderBy(asc(tasks.dueAt), asc(tasks.createdAt));
+}
+
+export interface CalendarClientOption {
+  id: string;
+  name: string;
+  categories: { id: string; name: string; color: string }[];
+}
+
+/** Clients that can receive calendar-created work, with their board categories. */
+export async function listCalendarClientOptions(): Promise<CalendarClientOption[]> {
+  const clientBoards = await db
+    .select({ client: clients, boardId: boards.id })
+    .from(clients)
+    .innerJoin(boards, eq(boards.clientId, clients.id))
+    .where(isNull(clients.archivedAt))
+    .orderBy(asc(clients.name));
+
+  if (!clientBoards.length) return [];
+
+  const categoryRows = await db.query.taskCategories.findMany({
+    where: inArray(
+      taskCategories.boardId,
+      clientBoards.map(({ boardId }) => boardId),
+    ),
+    orderBy: [asc(taskCategories.position), asc(taskCategories.name)],
+  });
+
+  return clientBoards.map(({ client, boardId }) => ({
+    id: client.id,
+    name: client.name,
+    categories: categoryRows
+      .filter((category) => category.boardId === boardId)
+      .map(({ id, name, color }) => ({ id, name, color })),
+  }));
+}
+
+/** The notification screen reads Buzzinga's real pending digest queue. */
+export async function listNotifications() {
+  const rows = await db
+    .select({ notification: pendingNotifications, task: tasks, board: boards })
+    .from(pendingNotifications)
+    .innerJoin(tasks, eq(pendingNotifications.taskId, tasks.id))
+    .innerJoin(boards, eq(pendingNotifications.boardId, boards.id))
+    .orderBy(desc(pendingNotifications.createdAt));
+
+  return rows.map(({ notification, task, board }) => ({
+    id: notification.id,
+    boardId: board.id,
+    type: notification.type,
+    message:
+      notification.type === "mention"
+        ? "You were mentioned"
+        : notification.type === "assign"
+          ? "Task assignment updated"
+          : notification.type === "move"
+            ? "Task moved"
+            : notification.type === "priority"
+              ? "Priority updated"
+              : "New comment added",
+    context: `${task.title} · ${board.title}`,
+    createdAt: notification.createdAt,
+  }));
 }
 
 export interface AgencyHealth {
@@ -469,16 +477,16 @@ export interface AgencyHealth {
 }
 
 export async function getAgencyHealth(): Promise<AgencyHealth> {
-  const [taskRows, columnRows, approvalRows, clientRows, commentRows, postRows, assigneeRows] =
-    await Promise.all([
+  const [taskRows, columnRows, clientRows, commentRows, postRows, assigneeRows] = await Promise.all(
+    [
       db.select().from(tasks),
       db.select().from(columns),
-      db.select().from(approvals).where(eq(approvals.state, "pending")),
       db.select().from(clients),
       db.select().from(comments),
       db.select().from(scheduledPosts),
       db.select().from(taskAssignees),
-    ]);
+    ],
+  );
 
   const columnKind = new Map(columnRows.map((column) => [column.id, column.name.toLowerCase()]));
   const isDone = (columnId: string) => /done|archive/.test(columnKind.get(columnId) ?? "");
@@ -498,18 +506,10 @@ export async function getAgencyHealth(): Promise<AgencyHealth> {
   const onTime = open.length ? 1 - stale.length / open.length : 1;
   const reviewLoad = open.length ? 1 - review.length / Math.max(open.length, 1) : 1;
   const hygiene = open.length ? 1 - unassigned.length / open.length : 1;
-  const slaRisk = approvalRows.length
-    ? 1 -
-      approvalRows.filter((row) => row.createdAt && Date.now() - row.createdAt.getTime() > DAY_MS)
-        .length /
-        approvalRows.length
-    : 1;
-
   const drivers = [
     { name: "On-time momentum", value: Math.round(onTime * 100) },
     { name: "Review load", value: Math.round(reviewLoad * 100) },
     { name: "Assignment hygiene", value: Math.round(hygiene * 100) },
-    { name: "Client feedback SLA", value: Math.round(slaRisk * 100) },
   ];
   const score = Math.round(drivers.reduce((sum, driver) => sum + driver.value, 0) / drivers.length);
   const label =
@@ -517,21 +517,22 @@ export async function getAgencyHealth(): Promise<AgencyHealth> {
 
   const interventions = clientRows
     .map((client) => {
-      const pending = approvalRows.filter((row) => row.clientId === client.id);
-      const aging = pending.filter(
-        (row) => row.createdAt && Date.now() - row.createdAt.getTime() > 12 * 3600_000,
+      const clientTasks = open.filter((task) => task.clientId === client.id);
+      const quiet = clientTasks.filter(
+        (task) => task.createdAt && Date.now() - task.createdAt.getTime() > 7 * DAY_MS,
       );
-      if (aging.length) {
+      if (quiet.length) {
         return {
           client: client.name,
-          detail: `${aging.length} approval${aging.length === 1 ? "" : "s"} aging past 12h`,
+          detail: `${quiet.length} task${quiet.length === 1 ? "" : "s"} gone quiet`,
           severity: "High",
         };
       }
-      if (pending.length) {
+      const withoutOwner = clientTasks.filter((task) => !assigned.has(task.id));
+      if (withoutOwner.length) {
         return {
           client: client.name,
-          detail: `${pending.length} awaiting your decision`,
+          detail: `${withoutOwner.length} unassigned task${withoutOwner.length === 1 ? "" : "s"}`,
           severity: "Watch",
         };
       }
@@ -566,7 +567,7 @@ export async function getAgencyHealth(): Promise<AgencyHealth> {
     kpis: [
       { label: "Open work", value: open.length },
       { label: "In production", value: production.length },
-      { label: "Client approval", value: approvalRows.length },
+      { label: "In review", value: review.length },
       { label: "Gone quiet", value: stale.length },
     ],
     interventions,
