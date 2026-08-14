@@ -12,14 +12,14 @@ import type { CalendarClientOption } from "@/lib/agency/queries";
 const cancelClass =
   "h-11 rounded-xl border border-line bg-white px-4 text-sm font-medium text-ink transition hover:bg-slate-50";
 const submitClass =
-  "h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#185be0] disabled:cursor-not-allowed disabled:opacity-50";
+  "h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-[#e6a200] disabled:cursor-not-allowed disabled:opacity-50";
 
 export function PageCreateButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#185be0]"
+      className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-[#e6a200]"
     >
       <Plus className="h-4 w-4" aria-hidden />
       Create

@@ -63,7 +63,7 @@ function CalendarDay({
       aria-label={`${format(day, "MMMM d, yyyy")}${isOver ? ", release to schedule" : ""}`}
       className={`min-h-[118px] border-b border-r border-line p-2 text-left align-top transition-colors duration-150 ${
         isOver
-          ? "bg-[#edf4ff] ring-2 ring-inset ring-primary/30"
+          ? "bg-[#fff3cc] ring-2 ring-inset ring-primary/30"
           : !isSameMonth(day, month)
             ? "bg-slate-50/40"
             : "bg-white"
@@ -244,7 +244,7 @@ export function MonthCalendar({ tasks }: { tasks: CalendarTask[] }) {
           onChange={(event) =>
             setMonth(new Date(month.getFullYear(), Number(event.target.value), 1))
           }
-          className="h-11 rounded-xl border border-line bg-white px-4 text-sm font-medium outline-none focus:border-[#b8cdfb] focus:ring-2 focus:ring-[#edf4ff]"
+          className="h-11 rounded-xl border border-line bg-white px-4 text-sm font-medium outline-none focus:border-[#ffd54a] focus:ring-2 focus:ring-[#fff3cc]"
         >
           {Array.from({ length: 12 }, (_, index) => (
             <option key={index} value={index}>
@@ -256,7 +256,7 @@ export function MonthCalendar({ tasks }: { tasks: CalendarTask[] }) {
           aria-label="Calendar year"
           value={month.getFullYear()}
           onChange={(event) => setMonth(new Date(Number(event.target.value), month.getMonth(), 1))}
-          className="h-11 rounded-xl border border-line bg-white px-4 text-sm font-medium outline-none focus:border-[#b8cdfb] focus:ring-2 focus:ring-[#edf4ff]"
+          className="h-11 rounded-xl border border-line bg-white px-4 text-sm font-medium outline-none focus:border-[#ffd54a] focus:ring-2 focus:ring-[#fff3cc]"
         >
           {yearOptions.map((year) => (
             <option key={year} value={year}>
@@ -268,7 +268,7 @@ export function MonthCalendar({ tasks }: { tasks: CalendarTask[] }) {
           aria-label="Filter calendar tasks"
           value={clientFilter}
           onChange={(event) => setClientFilter(event.target.value)}
-          className="h-11 min-w-32 rounded-xl border border-line bg-white px-4 text-sm font-medium outline-none focus:border-[#b8cdfb] focus:ring-2 focus:ring-[#edf4ff]"
+          className="h-11 min-w-32 rounded-xl border border-line bg-white px-4 text-sm font-medium outline-none focus:border-[#ffd54a] focus:ring-2 focus:ring-[#fff3cc]"
         >
           <option value="all">All tasks</option>
           {clientOptions.map(([clientId, clientName]) => (

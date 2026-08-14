@@ -1,10 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Mic, Sparkles, Square, X } from "lucide-react";
+import { Check, Maximize2, Mic, Minimize2, Sparkles, Square, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PlasmaVoiceVisualizer } from "@/components/reference/plasma-voice-visualizer";
 import { useGeminiLive } from "@/hooks/use-gemini-live";
 
@@ -44,13 +44,32 @@ export function VoicePlanner({
     else void live.start();
   }, [agentEnabled, live]);
 
+  const stageRef = useRef<HTMLElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void el.requestFullscreen();
+  }, []);
+
   return (
     <>
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <main className="min-w-0">
-          <section className="relative min-h-[420px] overflow-hidden rounded-[22px] border border-[#dfe8f2] bg-[#f7faff] shadow-[0_18px_48px_rgba(59,91,137,.10)] sm:min-h-[500px]">
+          <section
+            ref={stageRef}
+            className="voice-planner-stage relative min-h-[420px] overflow-hidden rounded-[22px] border border-[#f0e3c4] bg-[#fffaf0] shadow-[0_18px_48px_rgba(130,96,10,.10)] sm:min-h-[500px]"
+          >
             <PlasmaVoiceVisualizer state={live.state} level={level} />
-            <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,transparent_38%,rgba(247,250,255,.05)_68%,rgba(231,239,248,.24)_100%)]" />
+            <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,transparent_38%,rgba(255,250,240,.05)_68%,rgba(255,237,201,.26)_100%)]" />
             <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-5 sm:p-6">
               <div className="flex items-center gap-2 text-sm font-medium text-[#475467]">
                 <span
@@ -58,11 +77,25 @@ export function VoicePlanner({
                 />
                 {agentEnabled ? statusLabel[live.state] : "Voice not configured"}
               </div>
-              {live.activeTool && (
-                <span className="rounded-full border border-[#dfe8f2] bg-white/75 px-3 py-1.5 text-xs font-medium capitalize text-[#475467] backdrop-blur-sm">
-                  {live.activeTool.replaceAll("_", " ")}
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {live.activeTool && (
+                  <span className="rounded-full border border-[#f0e3c4] bg-white/75 px-3 py-1.5 text-xs font-medium capitalize text-[#475467] backdrop-blur-sm">
+                    {live.activeTool.replaceAll("_", " ")}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  onClick={toggleFullscreen}
+                  className="grid h-9 w-9 place-items-center rounded-full border border-[#f0e3c4] bg-white/75 text-[#667085] shadow-sm backdrop-blur-sm transition hover:bg-white hover:text-[#0f172a]"
+                >
+                  {isFullscreen ? (
+                    <Minimize2 className="h-4 w-4" aria-hidden />
+                  ) : (
+                    <Maximize2 className="h-4 w-4" aria-hidden />
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="absolute inset-x-0 bottom-7 z-20 flex justify-center sm:bottom-9">
@@ -74,12 +107,12 @@ export function VoicePlanner({
                 animate={
                   live.isLive
                     ? {
-                        boxShadow: ["0 0 0 0 rgba(37,99,235,.18)", "0 0 0 14px rgba(37,99,235,0)"],
+                        boxShadow: ["0 0 0 0 rgba(255,179,0,.22)", "0 0 0 14px rgba(255,179,0,0)"],
                       }
                     : {}
                 }
                 transition={{ repeat: Infinity, duration: 1.6 }}
-                className="grid h-16 w-16 place-items-center rounded-full border border-[#d9e4f0] bg-white text-[#0f172a] shadow-[0_10px_28px_rgba(59,91,137,.16)] transition hover:scale-[1.04] disabled:cursor-not-allowed disabled:bg-white/70 disabled:text-slate-400 sm:h-[72px] sm:w-[72px]"
+                className="grid h-16 w-16 place-items-center rounded-full border border-[#f0e2b8] bg-white text-[#0f172a] shadow-[0_10px_28px_rgba(130,96,10,.14)] transition hover:scale-[1.04] disabled:cursor-not-allowed disabled:bg-white/70 disabled:text-slate-400 sm:h-[72px] sm:w-[72px]"
               >
                 {live.isLive ? (
                   <Square className="h-5 w-5 fill-current" aria-hidden />
@@ -145,7 +178,7 @@ export function VoicePlanner({
                 <button
                   type="button"
                   onClick={live.approveWrite}
-                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground"
                 >
                   <Check className="h-4 w-4" /> Approve
                 </button>
@@ -188,7 +221,10 @@ function TodayCard({ events }: { events: PlannerEvent[] }) {
           <p className="py-4 text-sm leading-6 text-muted">No work is scheduled for today.</p>
         )}
       </div>
-      <Link href="/calendar" className="mt-3 inline-flex text-sm font-semibold text-primary">
+      <Link
+        href="/calendar"
+        className="mt-3 inline-flex text-sm font-semibold text-accent-foreground"
+      >
         View calendar →
       </Link>
     </aside>

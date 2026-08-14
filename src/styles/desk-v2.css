@@ -8,8 +8,8 @@
    Naming follows the mock so the two stay diffable. */
 
 .sq {
-  --amber: #0071e3;
-  --amber-2: #0066cc;
+  --amber: #ffb300;
+  --amber-2: #e6a200;
   --green: #248a3d;
   --red: #d70015;
   --blue: #007aff;
@@ -31,7 +31,7 @@
   --line: rgba(0, 0, 0, 0.1);
   --rail-bg: rgba(255, 255, 255, 0.72);
   --rail-ink: #1d1d1f;
-  --rail-active: rgba(0, 122, 255, 0.1);
+  --rail-active: rgba(255, 179, 0, 0.14);
   --chip: rgba(255, 255, 255, 0.78);
   --field: #ffffff;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.1), 0 2px 10px rgba(0, 0, 0, 0.04);
@@ -44,8 +44,8 @@
 }
 
 .dark .sq {
-  --amber: #0071e3;
-  --amber-2: #64b5ff;
+  --amber: #ffb300;
+  --amber-2: #ffd54a;
   --green: #30d158;
   --red: #ff453a;
   --blue: #2997ff;
@@ -60,7 +60,7 @@
   --line: rgba(255, 255, 255, 0.12);
   --rail-bg: rgba(28, 28, 30, 0.74);
   --rail-ink: #f5f5f7;
-  --rail-active: rgba(41, 151, 255, 0.18);
+  --rail-active: rgba(255, 179, 0, 0.22);
   --chip: rgba(58, 58, 60, 0.72);
   --field: #1c1c1e;
   --shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 2px 12px rgba(0, 0, 0, 0.32);
@@ -3366,8 +3366,8 @@
    Flat, deliberate surfaces replace the earlier translucent mockup look.
    Amber communicates decisions; charcoal establishes navigation and focus. */
 .sq {
-  --amber: #f2b632;
-  --amber-2: #8b5a00;
+  --amber: #ffb300;
+  --amber-2: #8a6100;
   --green: #24845f;
   --red: #c44536;
   --ink: #1d1d1a;
@@ -3387,8 +3387,8 @@
   --sky-base: #dedbd5;
 }
 .dark .sq {
-  --amber: #f2b632;
-  --amber-2: #f2c75f;
+  --amber: #ffb300;
+  --amber-2: #ffd54a;
   --ink: #f4f1e9;
   --muted: #b9b5aa;
   --faint: #8d897e;
@@ -3628,16 +3628,16 @@
 }
 
 .sq-board-actions {
-  color: white;
+  color: var(--ink);
   border-color: transparent;
   background: var(--amber);
-  box-shadow: 0 8px 24px rgba(0, 122, 255, 0.24);
+  box-shadow: 0 8px 24px rgba(255, 179, 0, 0.24);
 }
 
 .sq-floating-orb {
-  border-color: rgba(0, 122, 255, 0.55);
+  border-color: rgba(255, 179, 0, 0.55);
   background: #101820;
-  box-shadow: 0 10px 34px rgba(0, 122, 255, 0.28);
+  box-shadow: 0 10px 34px rgba(255, 179, 0, 0.28);
 }
 .sq-task-detail,
 .sq-task-workspace {
@@ -4318,8 +4318,8 @@
    actions. These rules intentionally sit last so legacy workspace styles all
    resolve through the same visual system. */
 .sq {
-  --amber: #0071e3;
-  --amber-2: #0066cc;
+  --amber: #ffb300;
+  --amber-2: #e6a200;
   --green: #248a3d;
   --red: #d70015;
   --blue: #007aff;
@@ -4333,7 +4333,7 @@
   --line: rgba(0, 0, 0, 0.1);
   --rail-bg: rgba(255, 255, 255, 0.72);
   --rail-ink: #1d1d1f;
-  --rail-active: rgba(0, 122, 255, 0.1);
+  --rail-active: rgba(255, 179, 0, 0.14);
   --chip: rgba(255, 255, 255, 0.78);
   --field: #ffffff;
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.1), 0 2px 10px rgba(0, 0, 0, 0.04);
@@ -4342,8 +4342,8 @@
 }
 
 .dark .sq {
-  --amber: #0071e3;
-  --amber-2: #64b5ff;
+  --amber: #ffb300;
+  --amber-2: #ffd54a;
   --green: #30d158;
   --red: #ff453a;
   --blue: #2997ff;
@@ -4357,7 +4357,7 @@
   --line: rgba(255, 255, 255, 0.12);
   --rail-bg: rgba(28, 28, 30, 0.74);
   --rail-ink: #f5f5f7;
-  --rail-active: rgba(41, 151, 255, 0.18);
+  --rail-active: rgba(255, 179, 0, 0.22);
   --chip: rgba(58, 58, 60, 0.72);
   --field: #1c1c1e;
   --shadow: 0 22px 60px rgba(0, 0, 0, 0.5), 0 2px 12px rgba(0, 0, 0, 0.32);
@@ -4419,10 +4419,10 @@
 }
 
 .sq-brandmark {
-  color: white;
+  color: var(--ink);
   background: var(--amber);
   border-radius: 11px;
-  box-shadow: 0 5px 14px rgba(0, 122, 255, 0.24);
+  box-shadow: 0 5px 14px rgba(255, 179, 0, 0.24);
 }
 
 .sq-workspace-label,
@@ -4457,7 +4457,7 @@
 
 .sq-client.active {
   outline: none;
-  box-shadow: inset 0 0 0 1px rgba(0, 122, 255, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(255, 179, 0, 0.2);
 }
 
 .sq-avatar {
@@ -4480,7 +4480,7 @@
 }
 
 .sq-count {
-  color: white;
+  color: var(--ink);
   background: var(--amber);
   font-family: var(--sans);
   font-weight: 700;
@@ -4577,10 +4577,10 @@
 .sq-review-controls .primary,
 .sq-askbar button,
 .sq-approval-row-actions .primary {
-  color: white;
+  color: var(--ink);
   border-color: transparent;
   background: var(--amber);
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(255, 179, 0, 0.2);
 }
 
 .sq-pill.amber:hover,
@@ -4663,7 +4663,7 @@
 }
 
 .sq-jarvis {
-  filter: drop-shadow(0 22px 36px rgba(0, 122, 255, 0.16));
+  filter: drop-shadow(0 22px 36px rgba(255, 179, 0, 0.16));
 }
 
 .sq-jarvis-trigger {
@@ -4737,7 +4737,7 @@
 }
 
 .sq-task:hover {
-  border-color: rgba(0, 122, 255, 0.28);
+  border-color: rgba(255, 179, 0, 0.28);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.09);
   transform: translateY(-2px);
 }
@@ -4795,7 +4795,7 @@
 }
 
 .sq-modal-confirm {
-  border-color: rgba(0, 122, 255, 0.35);
+  border-color: rgba(255, 179, 0, 0.35);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.22);
 }
 

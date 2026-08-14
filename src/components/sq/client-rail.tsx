@@ -56,11 +56,11 @@ function Navigation({ pathname, close }: { pathname: string; close?: () => void 
             href={href}
             onClick={close}
             className={`flex items-center gap-4 rounded-[13px] px-4 py-3.5 text-[15px] font-medium transition-colors ${
-              active ? "bg-[#eef5ff] text-[#155eef]" : "text-[#475467] hover:bg-slate-50"
+              active ? "bg-[#fff3cc] text-[#8a6100]" : "text-[#475467] hover:bg-slate-50"
             }`}
           >
             <Icon
-              className={`h-5 w-5 ${active ? "text-primary" : "text-[#667085]"}`}
+              className={`h-5 w-5 ${active ? "text-accent-foreground" : "text-[#667085]"}`}
               strokeWidth={1.9}
               aria-hidden
             />

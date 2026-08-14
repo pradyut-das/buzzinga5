@@ -29,7 +29,7 @@ export function SettingsView({
             key={label}
             onClick={() => setSection(label)}
             className={`flex w-full items-center gap-3 rounded-xl px-3 py-3.5 text-sm font-medium ${
-              section === label ? "bg-[#eef5ff] text-[#155eef]" : "text-[#475467] hover:bg-slate-50"
+              section === label ? "bg-[#fff3cc] text-[#8a6100]" : "text-[#475467] hover:bg-slate-50"
             }`}
           >
             <Icon className="h-5 w-5" aria-hidden /> {label}
@@ -72,7 +72,10 @@ export function SettingsView({
               <p className="text-sm leading-6 text-muted">
                 Contributors remain scoped to each board and are managed from task details.
               </p>
-              <Link href="/clients" className="mt-4 inline-flex text-sm font-semibold text-primary">
+              <Link
+                href="/clients"
+                className="mt-4 inline-flex text-sm font-semibold text-accent-foreground"
+              >
                 Open client boards →
               </Link>
             </div>

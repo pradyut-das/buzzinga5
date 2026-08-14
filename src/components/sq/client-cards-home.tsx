@@ -22,7 +22,7 @@ export function ClientCardsHome({
             <Link
               key={client.id}
               href={`/clients/${client.id}`}
-              className="group rounded-[18px] border border-line bg-white p-6 shadow-soft transition hover:-translate-y-0.5 hover:border-[#d9e4f5]"
+              className="group rounded-[18px] border border-line bg-white p-6 shadow-soft transition hover:-translate-y-0.5 hover:border-[#f2e3b3]"
             >
               <div className="flex items-start justify-between">
                 <div
@@ -34,7 +34,7 @@ export function ClientCardsHome({
                 >
                   {client.initials.slice(0, 1)}
                 </div>
-                <ArrowUpRight className="h-5 w-5 text-slate-300 transition group-hover:text-primary" />
+                <ArrowUpRight className="h-5 w-5 text-slate-300 transition group-hover:text-accent-foreground" />
               </div>
               <h2 className="mt-8 text-xl font-semibold tracking-[-0.02em]">{client.name}</h2>
               <div className="mt-5 flex gap-5 text-sm">

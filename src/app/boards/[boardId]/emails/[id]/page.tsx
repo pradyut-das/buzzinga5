@@ -163,7 +163,7 @@ export default function BoardEmailViewerPage({ params }: PageProps) {
               <span className="text-sm text-muted-foreground">Board:</span>
               <Link
                 href={`/boards/${email.boardId}`}
-                className="text-sm font-medium text-primary hover:underline"
+                className="text-sm font-medium text-accent-foreground hover:underline"
               >
                 {email.boardTitle}
               </Link>

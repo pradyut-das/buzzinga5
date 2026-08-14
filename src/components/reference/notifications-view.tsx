@@ -26,11 +26,11 @@ export function NotificationsView({ notifications }: { notifications: Notificati
     return (
       <Link
         href={`/boards/${item.boardId}`}
-        className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-line bg-[#f7faff] px-4 py-4 text-left last:border-b-0 sm:px-5"
+        className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-line bg-[#fffaf0] px-4 py-4 text-left last:border-b-0 sm:px-5"
       >
         <div className="flex items-center gap-3">
           <span className="h-2 w-2 rounded-full bg-primary" />
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-50 text-primary">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-50 text-accent-foreground">
             <Icon className="h-5 w-5" aria-hidden />
           </span>
         </div>
@@ -74,7 +74,7 @@ export function NotificationsView({ notifications }: { notifications: Notificati
             const SummaryIcon = Icon as typeof Bell;
             return (
               <div key={String(label)} className="flex items-center gap-3 py-4 first:pt-1">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-[#f4f8ff] text-primary">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-[#fff3cc] text-accent-foreground">
                   <SummaryIcon className="h-5 w-5" aria-hidden />
                 </span>
                 <div>

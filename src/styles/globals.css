@@ -32,7 +32,7 @@
   }
 
   ::selection {
-    background: #dbe8ff;
+    background: #ffe9a8;
     color: inherit;
   }
 
@@ -72,5 +72,15 @@
 
   .dark .board-column-header {
     background: rgb(255 255 255 / 3%);
+  }
+}
+
+@layer utilities {
+  .voice-planner-stage:fullscreen {
+    min-height: 100vh;
+    min-height: 100dvh;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
   }
 }

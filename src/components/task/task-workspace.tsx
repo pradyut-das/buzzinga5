@@ -61,7 +61,7 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
         <button
           type="button"
           onClick={close}
-          className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#185be0]"
+          className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-[#e6a200]"
         >
           Done
         </button>

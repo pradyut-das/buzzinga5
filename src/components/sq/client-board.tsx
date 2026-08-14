@@ -263,7 +263,7 @@ export function ClientBoard({
               <button
                 type="button"
                 onClick={() => setCreatingColumnId(column.id)}
-                className="mt-3 flex w-full items-center gap-2 rounded-xl px-2 py-3 text-sm font-medium text-primary hover:bg-white"
+                className="mt-3 flex w-full items-center gap-2 rounded-xl px-2 py-3 text-sm font-medium text-accent-foreground hover:bg-white"
               >
                 <Plus className="h-4 w-4" aria-hidden /> Add task
               </button>
@@ -296,7 +296,7 @@ export function ClientBoard({
               type="button"
               disabled={pending || !draft.trim() || !draftDueDate}
               onClick={submitTask}
-              className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-white shadow-sm hover:bg-[#185be0] disabled:opacity-50"
+              className="h-11 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-[#e6a200] disabled:opacity-50"
             >
               {pending ? "Creating…" : "Create task"}
             </button>

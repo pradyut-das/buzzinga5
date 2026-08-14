@@ -93,6 +93,6 @@ export function ModalShell({
 
 export const modalLabelClass = "mb-2 block text-sm font-medium text-ink";
 export const modalInputClass =
-  "h-11 w-full rounded-xl border border-line bg-white px-3.5 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-[#b8cdfb] focus:ring-2 focus:ring-[#edf4ff]";
+  "h-11 w-full rounded-xl border border-line bg-white px-3.5 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-[#ffd54a] focus:ring-2 focus:ring-[#fff3cc]";
 export const modalTextareaClass =
-  "min-h-28 w-full resize-y rounded-xl border border-line bg-white px-3.5 py-3 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-[#b8cdfb] focus:ring-2 focus:ring-[#edf4ff]";
+  "min-h-28 w-full resize-y rounded-xl border border-line bg-white px-3.5 py-3 text-sm text-ink outline-none transition placeholder:text-slate-400 focus:border-[#ffd54a] focus:ring-2 focus:ring-[#fff3cc]";

@@ -5,6 +5,15 @@ import { useEffect, useRef } from "react";
 import type { LiveState } from "@/hooks/use-gemini-live";
 
 // These are the exact state presets used by Voice UI Kit's PlasmaVisualizer.
+// The palette is tinted to the platform's amber gold theme.
+const amberColors = {
+  useCustomColors: true,
+  color1: "#ffe082",
+  color2: "#ffb300",
+  color3: "#ff8f00",
+  backgroundColor: "#2a1f05",
+} as const;
+
 const idleConfig: PlasmaConfig = {
   effectScale: 0.55,
   ringDistance: 0,
@@ -22,6 +31,7 @@ const idleConfig: PlasmaConfig = {
   glowThreshold: 0,
   plasmaSpeed: 0.3,
   rayLength: 1,
+  ...amberColors,
 };
 
 const thinkingConfig: PlasmaConfig = {
@@ -38,6 +48,7 @@ const thinkingConfig: PlasmaConfig = {
   glowFalloff: 0.5,
   plasmaSpeed: 3,
   rayLength: 1,
+  ...amberColors,
 };
 
 export function PlasmaVoiceVisualizer({ state, level }: { state: LiveState; level: number }) {
@@ -66,7 +77,7 @@ export function PlasmaVoiceVisualizer({ state, level }: { state: LiveState; leve
       initialConfig={idleConfig}
       className="absolute inset-0 pointer-events-none z-0"
       fallbackContent={
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#818cf8_0,#22d3ee_24%,#06101e_62%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#ffe082_0,#ffb300_24%,#2a1f05_62%)]" />
       }
     />
   );

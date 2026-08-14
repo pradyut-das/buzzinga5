@@ -137,7 +137,7 @@ export function ColumnDropZone({
       ref={setNodeRef}
       data-kanban-column-id={columnId}
       className={`min-h-24 space-y-3 rounded-xl p-1 transition-[background-color,box-shadow] duration-150 ${
-        isOver ? "bg-[#edf4ff] shadow-[inset_0_0_0_1px_rgba(37,99,235,.14)]" : ""
+        isOver ? "bg-[#fff3cc] shadow-[inset_0_0_0_1px_rgba(255,179,0,.20)]" : ""
       }`}
     >
       {children}

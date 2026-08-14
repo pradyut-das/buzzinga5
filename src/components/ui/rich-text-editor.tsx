@@ -247,7 +247,7 @@ export function RichTextEditor({
         autolink: true, // Auto-detect URLs when typing
         defaultProtocol: "https",
         HTMLAttributes: {
-          class: "text-primary underline underline-offset-2",
+          class: "text-accent-foreground underline underline-offset-2",
         },
       }),
       TaskList,
