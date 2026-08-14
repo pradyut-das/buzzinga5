@@ -8,6 +8,8 @@ import {
   assets,
   boards,
   contributors,
+  CONTRIBUTOR_COLORS,
+  users,
   reviewNotes,
   tasks,
   taskAssignees,
@@ -20,6 +22,7 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isTaskStatus } from "@/lib/task-types";
+import { indexAsset, indexTask } from "@/lib/search/indexer";
 
 /**
  * Everything a task workspace writes: category, status, people, doc and the
@@ -89,12 +92,14 @@ export async function saveTaskDoc(taskId: string, doc: string) {
   await db.update(tasks).set({ doc }).where(eq(tasks.id, taskId));
   // No revalidate: the editor already holds the current text, and refreshing
   // the route under an open editor would fight the caret.
+  void indexTask(taskId);
 }
 
 export async function setTaskClient(taskId: string, clientId: string | null) {
   await requireUser();
   await db.update(tasks).set({ clientId }).where(eq(tasks.id, taskId));
   await revalidateTask(taskId);
+  void indexTask(taskId);
 }
 
 export async function renameTaskTitle(taskId: string, title: string) {
@@ -103,6 +108,7 @@ export async function renameTaskTitle(taskId: string, title: string) {
   if (!trimmed) throw new Error("A task needs a title");
   await db.update(tasks).set({ title: trimmed }).where(eq(tasks.id, taskId));
   await revalidateTask(taskId);
+  void indexTask(taskId);
 }
 
 // ── People ────────────────────────────────────────────────────────────────
@@ -176,6 +182,7 @@ export async function renameAssetTitle(assetId: string, title: string) {
     .update(assets)
     .set({ title: title.trim(), suggestedTitle: null })
     .where(eq(assets.id, assetId));
+  void indexAsset(assetId);
   if (asset.taskId) await revalidateTask(asset.taskId);
 }
 
@@ -230,4 +237,69 @@ export async function resolveAssetNote(noteId: string, resolved: boolean) {
     const asset = await db.query.assets.findFirst({ where: eq(assets.id, note.assetId) });
     if (asset?.taskId) await revalidateTask(asset.taskId);
   }
+}
+
+// ── People come from real accounts ────────────────────────────────────────
+
+/**
+ * The accounts a board can staff work with. Pickers list these rather than
+ * board-local names, so every person on a task is someone who can sign in.
+ * `contributorId` is set once the account has been used on this board.
+ */
+export async function listBoardPeople(boardId: string) {
+  await requireUser();
+  const [userRows, contributorRows] = await Promise.all([
+    db.select().from(users).orderBy(users.name),
+    db.query.contributors.findMany({ where: eq(contributors.boardId, boardId) }),
+  ]);
+  const byUserId = new Map(
+    contributorRows.filter((row) => row.userId).map((row) => [row.userId as string, row]),
+  );
+
+  return userRows.map((user) => ({
+    userId: user.id,
+    name: user.name,
+    email: user.email,
+    contributorId: byUserId.get(user.id)?.id ?? null,
+  }));
+}
+
+/**
+ * Turns an account into this board's contributor, reusing the row if the
+ * account has worked here before. Colour is assigned round-robin so a new face
+ * is visually distinct without asking anyone to choose.
+ */
+async function contributorForUser(boardId: string, userId: string) {
+  const existing = await db.query.contributors.findFirst({
+    where: and(eq(contributors.boardId, boardId), eq(contributors.userId, userId)),
+  });
+  if (existing) return existing.id;
+
+  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!user) throw new Error("That account no longer exists");
+
+  const onBoard = await db.query.contributors.findMany({
+    where: eq(contributors.boardId, boardId),
+  });
+  const id = randomUUID();
+  await db.insert(contributors).values({
+    id,
+    boardId,
+    userId,
+    name: user.name,
+    email: user.email,
+    color: CONTRIBUTOR_COLORS[onBoard.length % CONTRIBUTOR_COLORS.length],
+  });
+  return id;
+}
+
+/** Assigns people to a task by account, creating board rows as needed. */
+export async function setTaskPeopleByUser(taskId: string, role: PeopleRole, userIds: string[]) {
+  await requireUser();
+  const task = await loadTask(taskId);
+  const contributorIds: string[] = [];
+  for (const userId of userIds) {
+    contributorIds.push(await contributorForUser(task.boardId, userId));
+  }
+  await setTaskPeople(taskId, role, contributorIds);
 }

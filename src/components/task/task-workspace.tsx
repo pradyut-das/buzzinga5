@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ContributorColor, TaskStatus } from "@/db/schema";
 import { ModalShell } from "@/components/reference/modal-shell";
 import { TaskDoc } from "@/components/task/task-doc";
-import { PeopleRail } from "@/components/task/people-rail";
+import { PeopleRail, type BoardPerson } from "@/components/task/people-rail";
 import { StatusPicker } from "@/components/task/task-chrome";
 import { setTaskCategory } from "@/actions/task-workspace";
 import { setTaskDueDate } from "@/actions/agency";
@@ -32,9 +32,11 @@ export interface TaskWorkspaceProps {
   clientId: string | null;
   clients: { id: string; name: string }[];
   contributors: { id: string; name: string; color: ContributorColor }[];
-  assignees: { id: string; name: string }[];
-  collaborators: { id: string; name: string }[];
-  stakeholders: { id: string; name: string }[];
+  /** Real accounts the people fields choose from. */
+  people: BoardPerson[];
+  assignees: { id: string; name: string; userId?: string | null }[];
+  collaborators: { id: string; name: string; userId?: string | null }[];
+  stakeholders: { id: string; name: string; userId?: string | null }[];
 }
 
 /**
@@ -125,7 +127,7 @@ export function TaskWorkspace(props: TaskWorkspaceProps) {
         <div className="ref-task-details-people">
           <PeopleRail
             taskId={task.id}
-            contributors={contributors}
+            people={props.people}
             assignees={props.assignees}
             collaborators={props.collaborators}
             stakeholders={props.stakeholders}

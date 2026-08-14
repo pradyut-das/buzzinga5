@@ -307,12 +307,25 @@ export async function getTaskWorkspace(taskId: string) {
   const people = (rows: { contributorId: string }[]) =>
     rows.map((row) => byId.get(row.contributorId)).filter((row) => row !== undefined);
 
+  // Everyone who can be staffed onto this work: real accounts, with the board
+  // row noted where the account has already worked here.
+  const userRows = await db.select().from(users).orderBy(asc(users.name));
+  const contributorByUser = new Map(
+    contributorRows.filter((row) => row.userId).map((row) => [row.userId as string, row]),
+  );
+
   return {
     task,
     clientId,
     client: clientRows.find((row) => row.id === clientId) ?? null,
     clients: clientRows,
     contributors: contributorRows,
+    boardPeople: userRows.map((user) => ({
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      contributorId: contributorByUser.get(user.id)?.id ?? null,
+    })),
     assignees: people(assigneeRows),
     collaborators: people(collaboratorRows),
     stakeholders: people(stakeholderRows),

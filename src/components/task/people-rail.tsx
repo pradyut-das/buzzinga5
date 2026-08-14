@@ -3,11 +3,21 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, Building2, UserRound, UsersRound } from "lucide-react";
-import { setTaskClient, setTaskPeople, type PeopleRole } from "@/actions/task-workspace";
+import { setTaskClient, setTaskPeopleByUser, type PeopleRole } from "@/actions/task-workspace";
 
 interface Person {
   id: string;
   name: string;
+  /** The account behind this board row, when it has one. */
+  userId?: string | null;
+}
+
+/** An account that can be staffed onto work. */
+export interface BoardPerson {
+  userId: string;
+  name: string;
+  email: string;
+  contributorId: string | null;
 }
 
 /**
@@ -17,7 +27,7 @@ interface Person {
  */
 export function PeopleRail({
   taskId,
-  contributors,
+  people,
   assignees,
   collaborators,
   stakeholders,
@@ -25,7 +35,7 @@ export function PeopleRail({
   clientId,
 }: {
   taskId: string;
-  contributors: Person[];
+  people: BoardPerson[];
   assignees: Person[];
   collaborators: Person[];
   stakeholders: Person[];
@@ -44,7 +54,7 @@ export function PeopleRail({
         kind="assignee"
         label="Assignee"
         hint="Owns the task"
-        contributors={contributors}
+        people={people}
         selected={assignees}
         single
         icon={<UserRound aria-hidden="true" />}
@@ -54,7 +64,7 @@ export function PeopleRail({
         kind="collaborator"
         label="Collaborators"
         hint="Working on it"
-        contributors={contributors}
+        people={people}
         selected={collaborators}
         icon={<UsersRound aria-hidden="true" />}
       />
@@ -63,7 +73,7 @@ export function PeopleRail({
         kind="stakeholder"
         label="Stakeholders"
         hint="Sign it off"
-        contributors={contributors}
+        people={people}
         selected={stakeholders}
         icon={<BadgeCheck aria-hidden="true" />}
       />
@@ -86,7 +96,7 @@ function PeopleField({
   kind,
   label,
   hint,
-  contributors,
+  people,
   selected,
   single = false,
   icon,
@@ -95,7 +105,7 @@ function PeopleField({
   kind: PeopleRole;
   label: string;
   hint: string;
-  contributors: Person[];
+  people: BoardPerson[];
   selected: Person[];
   /** An assignee is one person; the other roles are sets. */
   single?: boolean;
@@ -104,11 +114,15 @@ function PeopleField({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const chosen = new Set(selected.map((person) => person.id));
+  // Selection is tracked by account, because that is what the picker offers
+  // and what the action writes; the contributor row is an implementation detail.
+  const chosen = new Set(
+    selected.map((person) => person.userId ?? person.id).filter(Boolean) as string[],
+  );
 
   const commit = (ids: string[]) => {
     startTransition(async () => {
-      await setTaskPeople(taskId, kind, ids);
+      await setTaskPeopleByUser(taskId, kind, ids);
       router.refresh();
     });
   };
@@ -157,20 +171,21 @@ function PeopleField({
 
       {open && (
         <div className="sq-people-menu" role="listbox">
-          {contributors.map((person) => (
+          {people.map((person) => (
             <button
-              key={person.id}
+              key={person.userId}
               type="button"
               role="option"
-              aria-selected={chosen.has(person.id)}
-              className={`sq-people-option${chosen.has(person.id) ? " is-on" : ""}`}
-              onClick={() => toggle(person.id)}
+              aria-selected={chosen.has(person.userId)}
+              className={`sq-people-option${chosen.has(person.userId) ? " is-on" : ""}`}
+              onClick={() => toggle(person.userId)}
+              title={person.email}
             >
               <span className="sq-avatar sq-avatar-sm">{initials(person.name)}</span>
               {person.name}
             </button>
           ))}
-          {!contributors.length && <p className="sq-sub">Add people to this board first.</p>}
+          {!people.length && <p className="sq-sub">No accounts yet. Invite someone first.</p>}
         </div>
       )}
     </div>

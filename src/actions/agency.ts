@@ -19,6 +19,13 @@ import {
   topics,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/session";
+import {
+  indexAsset,
+  indexBroadcast,
+  indexClient,
+  indexComment,
+  indexTask,
+} from "@/lib/search/indexer";
 
 /**
  * Every write the agency screens perform. Each one names the object it
@@ -94,6 +101,7 @@ export async function createTask(
     dueAt,
   });
 
+  void indexTask(id);
   revalidateAgency(clientId);
   return id;
 }
@@ -103,34 +111,41 @@ export async function addTaskComment(taskId: string, body: string) {
   const task = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!task) throw new Error("Task not found");
 
-  // Comments belong to a board contributor; the founder gets one on first use.
-  let author = await db.query.contributors.findFirst({
-    where: and(eq(contributors.boardId, task.boardId), eq(contributors.name, user.name)),
-  });
+  // Comments belong to a board contributor, which stands for a real account.
+  // Match on the account rather than the name so two people who share a name
+  // do not share a byline.
+  let author =
+    (await db.query.contributors.findFirst({
+      where: and(eq(contributors.boardId, task.boardId), eq(contributors.userId, user.id)),
+    })) ??
+    (await db.query.contributors.findFirst({
+      where: and(eq(contributors.boardId, task.boardId), eq(contributors.name, user.name)),
+    }));
   if (!author) {
     const id = randomUUID();
-    await db.insert(contributors).values({
+    const row = {
       id,
       boardId: task.boardId,
+      userId: user.id,
       name: user.name,
-      color: "amber",
-    });
-    author = {
-      id,
-      boardId: task.boardId,
-      name: user.name,
-      email: null,
-      color: "amber",
+      email: user.email ?? null,
+      color: "amber" as const,
     };
+    await db.insert(contributors).values(row);
+    author = row;
   }
 
-  await db.insert(comments).values({
-    id: randomUUID(),
-    taskId,
-    boardId: task.boardId,
-    authorId: author.id,
-    content: body.trim(),
-  });
+  const inserted = await db
+    .insert(comments)
+    .values({
+      id: randomUUID(),
+      taskId,
+      boardId: task.boardId,
+      authorId: author.id,
+      content: body.trim(),
+    })
+    .returning({ id: comments.id });
+  if (inserted[0]) void indexComment(inserted[0].id);
 
   const board = await db.query.boards.findFirst({
     where: eq(boards.id, task.boardId),
@@ -187,6 +202,7 @@ export async function scheduleBroadcast(broadcastId: string, scheduledAt: Date) 
     .update(broadcasts)
     .set({ scheduledAt, state: "scheduled" })
     .where(eq(broadcasts.id, broadcastId));
+  void indexBroadcast(broadcastId);
   revalidatePath("/communities");
 }
 
@@ -214,6 +230,7 @@ export async function markPostPublished(postId: string) {
 export async function renameAsset(assetId: string, title: string) {
   await requireUser();
   await db.update(assets).set({ title: title.trim() }).where(eq(assets.id, assetId));
+  void indexAsset(assetId);
   revalidateAgency();
 }
 
@@ -222,6 +239,7 @@ export async function renameTask(taskId: string, title: string) {
   const task = await db.query.tasks.findFirst({ where: eq(tasks.id, taskId) });
   if (!task) throw new Error("Task not found");
   await db.update(tasks).set({ title: title.trim() }).where(eq(tasks.id, taskId));
+  void indexTask(taskId);
   const board = await db.query.boards.findFirst({
     where: eq(boards.id, task.boardId),
   });
@@ -248,5 +266,6 @@ export async function setTaskDueDate(taskId: string, date: string | null) {
 export async function renameClient(clientId: string, name: string) {
   await requireUser();
   await db.update(clients).set({ name: name.trim() }).where(eq(clients.id, clientId));
+  void indexClient(clientId);
   revalidateAgency(clientId);
 }

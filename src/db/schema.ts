@@ -180,6 +180,12 @@ export const contributors = sqliteTable("contributors", {
   name: text("name").notNull(),
   email: text("email"), // Optional - for email notifications
   color: text("color").notNull().$type<ContributorColor>(),
+  /**
+   * The real account this contributor stands for. People pickers list users and
+   * find-or-create the contributor behind the choice, so a board's people are
+   * accounts rather than typed-in names. Null on rows that predate the link.
+   */
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
 });
 
 // Task assignees - many-to-many
@@ -625,6 +631,10 @@ export const contributorsRelations = relations(contributors, ({ one, many }) => 
   board: one(boards, {
     fields: [contributors.boardId],
     references: [boards.id],
+  }),
+  user: one(users, {
+    fields: [contributors.userId],
+    references: [users.id],
   }),
   taskAssignees: many(taskAssignees),
   taskCollaborators: many(taskCollaborators),

@@ -1,14 +1,19 @@
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { ClientBoard } from "@/components/sq/client-board";
 import { TaskWorkspace } from "@/components/task/task-workspace";
+import { BlockHighlight } from "@/components/search/block-highlight";
 import { getClientBoard, getTaskWorkspace } from "@/lib/agency/queries";
 import "@/styles/desk-v2.css";
 
 export const dynamic = "force-dynamic";
 
-/** The rail only needs a name and an id, whichever role the person holds. */
-const people = (rows: { id: string; name: string }[]) =>
-  rows.map((row) => ({ id: row.id, name: row.name }));
+/**
+ * The rail needs a name, the board row's id, and the account behind it — the
+ * account is what the picker selects on.
+ */
+const people = (rows: { id: string; name: string; userId?: string | null }[]) =>
+  rows.map((row) => ({ id: row.id, name: row.name, userId: row.userId ?? null }));
 
 const category = (row: { id: string; name: string; color: string }) => ({
   id: row.id,
@@ -41,6 +46,9 @@ export default async function TaskPage({
       columns={board.columns}
       categories={board.categories.map(category)}
     >
+      <Suspense fallback={null}>
+        <BlockHighlight taskId={task.id} />
+      </Suspense>
       <TaskWorkspace
         task={{
           id: task.id,
@@ -52,6 +60,7 @@ export default async function TaskPage({
         }}
         categories={detail.categories.map(category)}
         category={detail.category ? category(detail.category) : null}
+        people={detail.boardPeople}
         clientId={detail.clientId}
         clients={detail.clients.map((client) => ({ id: client.id, name: client.name }))}
         contributors={detail.contributors.map((row) => ({
