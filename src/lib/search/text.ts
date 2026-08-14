@@ -75,12 +75,7 @@ export function htmlToPlainText(content: string): string {
  * ordering; a result that ranks well in both arms outranks one found by a
  * single arm. `k` softens the score so no single list dominates.
  */
-export function rrfFuse<T>(
-  keyword: T[],
-  semantic: T[],
-  key: (item: T) => string,
-  k = 60,
-): T[] {
+export function rrfFuse<T>(keyword: T[], semantic: T[], key: (item: T) => string, k = 60): T[] {
   const scores = new Map<string, { item: T; score: number; order: number }>();
   const push = (list: T[]) => {
     for (const [rank, item] of list.entries()) {

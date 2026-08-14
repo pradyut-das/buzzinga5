@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SearchPalette } from "@/components/search/search-palette";
 import "../styles/globals.css";
 
 // One typeface for the whole product. Weight and letter-spacing carry the
@@ -24,6 +25,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} antialiased`}>
         <ThemeProvider>{children}</ThemeProvider>
+        <SearchPalette />
       </body>
     </html>
   );

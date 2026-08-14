@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { communities, integrationSyncs, topics } from "@/db/schema";
 import { env } from "@/lib/validate-env";
+import { indexCommunity, indexTopic } from "@/lib/search/indexer";
 
 /**
  * WhatsApp communities and Instagram research both come from unofficial
@@ -76,10 +77,16 @@ export async function syncWhatsApp(): Promise<{ synced: number; status: string }
       };
       if (match) {
         await db.update(communities).set(values).where(eq(communities.id, match.id));
+        void indexCommunity(match.id);
       } else {
-        await db
-          .insert(communities)
-          .values({ id: randomUUID(), externalId: group.id, platform: "whatsapp", ...values });
+        const id = randomUUID();
+        await db.insert(communities).values({
+          id,
+          externalId: group.id,
+          platform: "whatsapp",
+          ...values,
+        });
+        void indexCommunity(id);
       }
     }
 
@@ -108,8 +115,9 @@ export async function syncInstagram(
         env.INSTAGRAM_API_KEY,
       );
       for (const [index, signal] of signals.entries()) {
+        const id = randomUUID();
         await db.insert(topics).values({
-          id: randomUUID(),
+          id,
           clientId,
           title: signal.title,
           evidence: signal.evidence ?? null,
@@ -122,6 +130,7 @@ export async function syncInstagram(
           radarX: Math.round(50 + Math.cos(index) * Math.min(40, (signal.momentumPct ?? 20) / 2)),
           radarY: Math.round(50 + Math.sin(index) * Math.min(40, (signal.momentumPct ?? 20) / 2)),
         });
+        void indexTopic(id);
         count += 1;
       }
     }

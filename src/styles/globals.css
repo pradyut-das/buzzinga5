@@ -84,3 +84,22 @@
     box-shadow: none;
   }
 }
+
+/* Block-search deep-link flash: marks the exact block a result points at. */
+.search-block-flash {
+  animation: search-block-flash 0.9s ease 2;
+  border-radius: 6px;
+}
+
+@keyframes search-block-flash {
+  0% {
+    background-color: rgb(250 204 21 / 45%);
+    outline: 2px solid rgb(250 204 21 / 70%);
+    box-shadow: 0 0 0 6px rgb(250 204 21 / 15%);
+  }
+  100% {
+    background-color: transparent;
+    outline: 2px solid transparent;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}

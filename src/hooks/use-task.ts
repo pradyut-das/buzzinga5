@@ -34,6 +34,7 @@ export interface TaskWithComments {
   columnId: string;
   boardId: string;
   createdAt: Date | null;
+  doc?: string | null;
   column: {
     id: string;
     name: string;

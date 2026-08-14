@@ -23,9 +23,7 @@ export function BlockHighlight({ taskId }: { taskId: string | null }) {
 
     const FLASH_MS = 2600;
     const find = (): HTMLElement | null => {
-      const editor = document.querySelector<HTMLElement>(
-        ".sq-doc-editor .ProseMirror",
-      );
+      const editor = document.querySelector<HTMLElement>(".sq-doc-editor .ProseMirror");
       if (!editor) return null;
       const children = [...editor.children] as HTMLElement[];
       if (blockId) {

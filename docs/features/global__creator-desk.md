@@ -16,7 +16,8 @@ system.
 - The sidebar contains only `Home`, `Clients`, `Calendar`, `Notifications`, and
   `Settings`, in that order.
 - Search, help, and notifications appear in the 82px utility header.
-- `Cmd+K` / `Ctrl+K` opens real client search.
+- `Cmd+K` / `Ctrl+K` opens workspace search (tasks, doc blocks, comments,
+  assets, topics, communities, broadcasts, clients).
 - Below `lg`, the sidebar is replaced by a menu button and 270px modal drawer.
 - The previous client roster, collapsible icon rail, `More tools` menu, floating
   board controls, depth canvas, glass shell, and Jarvis core are not rendered.

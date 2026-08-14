@@ -71,9 +71,9 @@ export function VoicePlanner({
             <PlasmaVoiceVisualizer state={live.state} level={level} />
             <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(circle_at_center,transparent_38%,rgba(255,250,240,.05)_68%,rgba(255,237,201,.26)_100%)]" />
             <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-5 sm:p-6">
-              <div className="flex items-center gap-2 text-sm font-medium text-[#475467]">
+              <div className="flex items-center gap-2 rounded-full border border-[#f0e3c4] bg-white/75 px-3 py-1.5 text-sm font-medium text-[#475467] backdrop-blur-sm">
                 <span
-                  className={`h-2.5 w-2.5 rounded-full ${live.isLive ? "bg-emerald-500" : "bg-slate-300"}`}
+                  className={`h-2.5 w-2.5 rounded-full ${live.isLive ? "bg-emerald-500" : "bg-slate-400"}`}
                 />
                 {agentEnabled ? statusLabel[live.state] : "Voice not configured"}
               </div>

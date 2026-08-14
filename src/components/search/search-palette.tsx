@@ -98,9 +98,7 @@ export function SearchPalette() {
     setSearched(true);
     void fetch(`/api/search?q=${encodeURIComponent(q)}`)
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { results: SearchResult[] } | null) =>
-        setResults(data?.results ?? []),
-      )
+      .then((data: { results: SearchResult[] } | null) => setResults(data?.results ?? []))
       .catch(() => setResults([]))
       .finally(() => setLoading(false));
   }, []);
@@ -161,60 +159,56 @@ export function SearchPalette() {
             autoFocus
           />
           <CommandList>
-        {!searched && (
-          <div className="px-2 py-3 text-sm text-muted-foreground">
-            Type at least 2 characters to search across the workspace.
-          </div>
-        )}
-        {searched && loading && results.length === 0 && (
-          <div className="px-2 py-3 text-sm text-muted-foreground">
-            Searching…
-          </div>
-        )}
-        {searched && !loading && results.length === 0 && (
-          <CommandEmpty>No results for &ldquo;{query}&rdquo;.</CommandEmpty>
-        )}
-        {shown.map((type) => {
-          const label = GROUP_LABEL[type];
-          return (
-            <CommandGroup key={label} heading={label}>
-              {groups.get(label)!.map((result) => (
-                <CommandItem
-                  key={result.id}
-                  value={`${result.title} ${result.snippet}`}
-                  onSelect={() => select(result)}
-                  className="flex items-start gap-3 py-3"
-                >
-                  <span
-                    className={cn(
-                      "mt-0.5 shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                      "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {type === "task_block" ? "Block" : type.replace("_", " ")}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-baseline gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {result.title}
+            {!searched && (
+              <div className="px-2 py-3 text-sm text-muted-foreground">
+                Type at least 2 characters to search across the workspace.
+              </div>
+            )}
+            {searched && loading && results.length === 0 && (
+              <div className="px-2 py-3 text-sm text-muted-foreground">Searching…</div>
+            )}
+            {searched && !loading && results.length === 0 && (
+              <CommandEmpty>No results for &ldquo;{query}&rdquo;.</CommandEmpty>
+            )}
+            {shown.map((type) => {
+              const label = GROUP_LABEL[type];
+              return (
+                <CommandGroup key={label} heading={label}>
+                  {groups.get(label)!.map((result) => (
+                    <CommandItem
+                      key={result.id}
+                      value={`${result.title} ${result.snippet}`}
+                      onSelect={() => select(result)}
+                      className="flex items-start gap-3 py-3"
+                    >
+                      <span
+                        className={cn(
+                          "mt-0.5 shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                          "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {type === "task_block" ? "Block" : type.replace("_", " ")}
                       </span>
-                      {result.clientName && (
-                        <span className="truncate text-xs text-muted-foreground">
-                          {result.clientName}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline gap-2">
+                          <span className="truncate text-sm font-medium">{result.title}</span>
+                          {result.clientName && (
+                            <span className="truncate text-xs text-muted-foreground">
+                              {result.clientName}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                    <span
-                      className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground"
-                      dangerouslySetInnerHTML={{ __html: result.snippet }}
-                    />
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          );
-        })}
-        </CommandList>
+                        <span
+                          className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground"
+                          dangerouslySetInnerHTML={{ __html: result.snippet }}
+                        />
+                      </span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              );
+            })}
+          </CommandList>
         </Command>
       </DialogContent>
     </Dialog>
