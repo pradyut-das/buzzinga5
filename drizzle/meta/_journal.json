@@ -50,6 +50,27 @@
       "when": 1786363349775,
       "tag": "0006_supabase-auth",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786722357542,
+      "tag": "0007_fuzzy_deadpool",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786731764321,
+      "tag": "0008_contributor_user_link",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786733172429,
+      "tag": "0009_docs_and_blocks",
+      "breakpoints": true
     }
   ]
 }

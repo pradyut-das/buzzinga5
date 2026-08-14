@@ -11,6 +11,7 @@ import {
   extractMentionIds,
 } from "@/lib/notifications";
 import { requireTask, requireComment, requireContributor } from "@/lib/require-resource";
+import { indexComment, removeSource } from "@/lib/search/indexer";
 
 export async function createComment(
   taskId: string,
@@ -79,6 +80,7 @@ export async function createComment(
     });
   }
 
+  void indexComment(id);
   revalidatePath(`/boards/${boardId}`);
   return id;
 }
@@ -126,6 +128,7 @@ export async function updateComment(
     });
   }
 
+  void indexComment(commentId);
   revalidatePath(`/boards/${boardId}`);
 }
 
@@ -135,5 +138,6 @@ export async function deleteComment(commentId: string, boardId: string) {
 
   // Delete the comment
   await db.delete(comments).where(eq(comments.id, commentId));
+  void removeSource("comment", commentId);
   revalidatePath(`/boards/${boardId}`);
 }

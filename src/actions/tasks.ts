@@ -8,6 +8,7 @@ import { canAccessBoard, requireBoardAccess } from "@/lib/secure-board";
 import { TASK_PRIORITIES, type TaskPriority } from "@/db/schema";
 import { queueMoveNotification, queuePriorityNotification } from "@/lib/notifications";
 import { requireColumn, requireTask } from "@/lib/require-resource";
+import { indexTask, removeSource } from "@/lib/search/indexer";
 
 function toDateFromDbValue(v: unknown): Date | null {
   if (v === null || v === undefined) return null;
@@ -47,6 +48,7 @@ export async function createTask(
     ...(createdAt ? { createdAt } : null),
   });
 
+  void indexTask(id);
   revalidatePath(`/boards/${boardId}`);
   return id;
 }
@@ -66,6 +68,7 @@ export async function getTask(id: string) {
             t.column_id AS columnId,
             t.board_id AS boardId,
             t.created_at AS createdAt,
+            t.doc AS doc,
             c.name AS columnName
           FROM tasks t
           JOIN columns c ON c.id = t.column_id
@@ -148,6 +151,7 @@ export async function getTask(id: string) {
     columnId: String(taskRow.columnId),
     boardId: String(taskRow.boardId),
     createdAt: toDateFromDbValue(taskRow.createdAt),
+    doc: taskRow.doc ? String(taskRow.doc) : null,
     column: {
       id: String(taskRow.columnId),
       name: String(taskRow.columnName ?? ""),
@@ -198,6 +202,7 @@ export async function updateTaskTitle(id: string, title: string, boardId: string
   await requireTask(id, boardId);
 
   await db.update(tasks).set({ title }).where(eq(tasks.id, id));
+  void indexTask(id);
   revalidatePath(`/boards/${boardId}`);
 }
 
@@ -344,9 +349,18 @@ export async function deleteTask(id: string, boardId: string) {
   await db.delete(taskTags).where(eq(taskTags.taskId, id));
 
   // Delete comments before removing the task to honor restrict FKs
+  const commentRows = await db
+    .select({ commentId: comments.id })
+    .from(comments)
+    .where(eq(comments.taskId, id));
   await db.delete(comments).where(eq(comments.taskId, id));
 
   await db.delete(tasks).where(eq(tasks.id, id));
+
+  // Remove the task's search rows (title, blocks) and its comments' rows.
+  void removeSource("task_title", id);
+  void removeSource("task_block", id);
+  for (const comment of commentRows) void removeSource("comment", comment.commentId);
 
   // Update positions
   await db

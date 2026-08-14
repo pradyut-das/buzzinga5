@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { CommentsSection } from "./comments-section";
 import { TaskDetails } from "./task-details";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { taskKeys, useTaskQuery } from "@/hooks/use-task";
 import { SyncIndicator } from "@/components/sync-indicator";
 import { Button } from "@/components/ui/button";
@@ -155,6 +156,7 @@ export function TaskSidebar({ taskId, boardId, columns, contributors, tags }: Ta
         columnId: localTaskEntity.columnId,
         boardId,
         createdAt: localTaskEntity.createdAt,
+        doc: (serverTask ?? hydratedTaskDetails)?.doc ?? null,
         column: {
           id: localTaskEntity.columnId,
           name: columns.find((c) => c.id === localTaskEntity.columnId)?.name ?? "",
@@ -410,6 +412,22 @@ export function TaskSidebar({ taskId, boardId, columns, contributors, tags }: Ta
                       </div>
                     </div>
                   )}
+                  <div className="border-b border-border/60 px-6 pb-2 pt-5">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold">Docs</h3>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground">The brief</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="px-4 pb-4">
+                    <RichTextEditor
+                      content={taskForUI.doc ?? undefined}
+                      editable={false}
+                      placeholder="No brief yet."
+                      className="sq-doc-editor"
+                    />
+                  </div>
                   <CommentsSection
                     taskId={taskForUI.id}
                     boardId={boardId}
