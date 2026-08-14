@@ -41,4 +41,3 @@
     Justification: Architectural duplication and decorative dominance prevent every element from earning its place.
 
 ## Total: 8/30
-

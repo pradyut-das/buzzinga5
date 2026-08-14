@@ -41,4 +41,3 @@ Anti-patterns to guard against (specific to REDESIGN):
 - Redesigning to follow a trend rather than the principles above
 - Treating the Preserve list as optional — it must be filled before this handoff is valid
 ```
-

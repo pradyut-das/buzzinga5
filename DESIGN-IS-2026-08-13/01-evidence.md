@@ -80,4 +80,3 @@
 - Production bundle size and field performance were not measured; development tooling inflates the recorded weight.
 - Voice, write confirmations, destructive actions, integrations, email delivery, and admin mutations were not exercised because this was a read-only audit.
 - Dynamic list counts depend on the current authenticated dataset.
-

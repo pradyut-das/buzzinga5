@@ -19,4 +19,3 @@
 - `dogfood-output/screenshots/calendar-unscheduled.png`
 - `dogfood-output/screenshots/notifications.png`
 - `dogfood-output/screenshots/settings.png`
-

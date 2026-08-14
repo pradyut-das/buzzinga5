@@ -1,20 +1,20 @@
 # Dogfood Report: Squirrl Agency OS
 
-| Field | Value |
-|---|---|
-| Date | 2026-08-13 |
-| App URL | `http://localhost:5800` |
-| Session | `buzzinga5-audit` |
-| Scope | Authenticated platform, read-only, desktop and mobile |
+| Field   | Value                                                 |
+| ------- | ----------------------------------------------------- |
+| Date    | 2026-08-13                                            |
+| App URL | `http://localhost:5800`                               |
+| Session | `buzzinga5-audit`                                     |
+| Scope   | Authenticated platform, read-only, desktop and mobile |
 
 ## Summary
 
-| Severity | Count |
-|---|---:|
-| Critical | 0 |
-| High | 4 |
-| Medium | 5 |
-| Low | 0 |
+| Severity  | Count |
+| --------- | ----: |
+| Critical  |     0 |
+| High      |     4 |
+| Medium    |     5 |
+| Low       |     0 |
 | **Total** | **9** |
 
 ## Issues
@@ -85,4 +85,3 @@
 - **Category:** accessibility / visual
 - **Evidence:** `screenshots/clients-mobile.png`; Axe found nine serious contrast failures in open Search (lowest 1.42:1), non-unique landmarks, and uncertain contrast on 21 pale client initials; linter label warnings at `src/components/sq/caption-studio.tsx:124,128,213` and `src/app/(desk)/communities/page.tsx:100,104`.
 - **Description:** Mobile client cards waste large amounts of vertical space, while overlay contrast and semantic labeling do not meet a consistent WCAG AA floor.
-

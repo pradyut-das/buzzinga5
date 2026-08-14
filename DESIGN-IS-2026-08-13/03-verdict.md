@@ -9,4 +9,3 @@
 3. **Principles #10/#5 — Collapse the duplicate product shells:** keep one board/task experience, one visual system, and a navigation model that either exposes or retires every implemented workspace. Evidence: `01-evidence.md#10-as-little-design-as-possible`, `01-evidence.md#5-unobtrusive`.
 4. **Principles #2/#5 — Replace the orb-first Home with an action-first agency dashboard:** surface attention, deadlines, approvals, and quick creation first; keep voice as an optional accelerator with a text equivalent. Evidence: `01-evidence.md#2-useful`, `01-evidence.md#5-unobtrusive`.
 5. **Principles #8/#9 — Establish a release-quality floor:** WCAG AA, reduced-motion canvas fallback, responsive density, state verification, and production bundle budgets must be acceptance criteria. Evidence: `01-evidence.md#8-thorough`, `01-evidence.md#9-environmentally-friendly`.
-
