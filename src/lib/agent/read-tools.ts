@@ -1,9 +1,12 @@
-import { and, desc, eq, inArray, like } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, like } from "drizzle-orm";
 import { db } from "@/db";
 import {
   boardMembers,
+  clients,
   columns,
   comments,
+  docBlocks,
+  docs,
   contributors,
   tags,
   taskAssignees,
@@ -13,9 +16,22 @@ import {
   users,
   type TaskPriority,
 } from "@/db/schema";
-import { AgentError, resolveBoard, resolveColumn, type AgentScope } from "@/lib/agent/scope";
+import {
+  AgentError,
+  didYouMean,
+  resolveBoard,
+  resolveColumn,
+  type AgentScope,
+} from "@/lib/agent/scope";
 import { classifyColumn, getDashboardStats, isOpenKind } from "@/lib/agent/stats";
 import { plainTextFromContent } from "@/lib/agent/text";
+import {
+  semanticSearch,
+  toAgentHits,
+  TASK_SOURCE_TYPES,
+  DOC_SOURCE_TYPES,
+  type SearchSourceType,
+} from "@/lib/search/semantic";
 
 /** Every read tool takes plain names, never ids — the model never sees UUIDs. */
 export interface SearchTasksInput {
@@ -55,6 +71,12 @@ interface TaskShape {
   createdAt: string | null;
   lastActivityAt: string | null;
   idleDays: number;
+  /**
+   * How the text query reached this row: its title contained the words, the
+   * semantic index suggested it, or both. Absent when no text query was given.
+   * A "meaning"-only row is a candidate to confirm, not an established answer.
+   */
+  matchedBy?: "title" | "meaning" | "both";
 }
 
 /**
@@ -66,7 +88,13 @@ export async function searchTasks(scope: AgentScope, input: SearchTasksInput) {
   if (!boardIds.length) return { total: 0, returned: 0, tasks: [] as TaskShape[] };
 
   const limit = Math.min(Math.max(input.limit ?? 25, 1), 50);
-  const rows = await db
+
+  // Text matching always runs both ways. A spoken phrase rarely quotes a
+  // title, so the substring hit and the semantic neighbourhood are unioned
+  // rather than tried in order — the index contributes candidates even when
+  // the literal words did match, since the better answer is often the one
+  // whose brief is about this and whose title is not.
+  let rows = await db
     .select()
     .from(tasks)
     .where(
@@ -75,6 +103,31 @@ export async function searchTasks(scope: AgentScope, input: SearchTasksInput) {
         input.titleContains ? like(tasks.title, `%${input.titleContains}%`) : undefined,
       ),
     );
+
+  const literalIds = new Set(rows.map((task) => task.id));
+  const meaningIds = new Set<string>();
+
+  if (input.titleContains) {
+    const { rows: hits } = await semanticSearch({
+      query: input.titleContains,
+      boardIds,
+      sourceTypes: [...TASK_SOURCE_TYPES],
+      limit: 25,
+    });
+    for (const hit of hits) {
+      if (hit.row.taskId) meaningIds.add(hit.row.taskId);
+    }
+
+    const extra = [...meaningIds].filter((id) => !literalIds.has(id));
+    if (extra.length) {
+      const semanticRows = await db
+        .select()
+        .from(tasks)
+        .where(and(inArray(tasks.boardId, boardIds), inArray(tasks.id, extra)));
+      // Literal hits first: they are the safer reading of what was asked.
+      rows = [...rows, ...semanticRows];
+    }
+  }
 
   const [
     columnRows,
@@ -111,7 +164,16 @@ export async function searchTasks(scope: AgentScope, input: SearchTasksInput) {
       .map((comment) => comment.createdAt?.getTime() ?? 0)
       .reduce((max, value) => Math.max(max, value), 0);
     const lastActivity = Math.max(lastComment, task.createdAt?.getTime() ?? 0);
+    const literal = literalIds.has(task.id);
+    const meaning = meaningIds.has(task.id);
     return {
+      matchedBy: !input.titleContains
+        ? undefined
+        : literal && meaning
+          ? ("both" as const)
+          : literal
+            ? ("title" as const)
+            : ("meaning" as const),
       title: task.title,
       board: boardTitle.get(task.boardId) ?? "Board",
       column: column?.name ?? "Unknown",
@@ -203,6 +265,8 @@ export async function getTaskDetails(
       `"${taskTitle}" matches several tasks: ${candidates.map((t) => `${t.title} (${t.board})`).join("; ")}. Which one?`,
     );
   }
+  // The row carries how it was matched, so a paraphrased hit gets confirmed
+  // rather than assumed.
   return candidates[0];
 }
 
@@ -280,10 +344,30 @@ export async function getTaskComments(
   boardName?: string | null,
 ) {
   const boardIds = boardName ? [resolveBoard(scope, boardName).id] : scope.boardIds;
-  const matches = await db
+  let matches = await db
     .select()
     .from(tasks)
     .where(and(inArray(tasks.boardId, boardIds), like(tasks.title, `%${taskTitle}%`)));
+
+  // Meaning is consulted every time, not only on a miss: "what did people say
+  // about the pricing one" should reach the task whose brief is about pricing.
+  const { rows: hits } = await semanticSearch({
+    query: taskTitle,
+    boardIds,
+    sourceTypes: [...TASK_SOURCE_TYPES],
+    limit: 6,
+  });
+  const literal = new Set(matches.map((task) => task.id));
+  const extra = [...new Set(hits.map((hit) => hit.row.taskId).filter(Boolean))].filter(
+    (id) => id && !literal.has(id),
+  ) as string[];
+  if (extra.length) {
+    const semanticRows = await db
+      .select()
+      .from(tasks)
+      .where(and(inArray(tasks.boardId, boardIds), inArray(tasks.id, extra)));
+    matches = [...matches, ...semanticRows];
+  }
   if (!matches.length) throw new AgentError(`No task matching "${taskTitle}".`);
   if (matches.length > 1) {
     throw new AgentError(
@@ -372,4 +456,276 @@ export async function previewColumn(
       priority: task.priority,
     })),
   };
+}
+
+// ── Semantic search ───────────────────────────────────────────────────────
+
+export interface SemanticSearchToolInput {
+  query: string;
+  clientName?: string | null;
+  boardName?: string | null;
+  kinds?: SearchSourceType[] | null;
+  limit?: number | null;
+}
+
+/**
+ * Meaning-based search over everything the user's boards contain. The scope is
+ * board membership, same as every other read tool, so a semantic neighbour on
+ * someone else's board can never leak into an answer.
+ */
+export async function semanticSearchTool(scope: AgentScope, input: SemanticSearchToolInput) {
+  const query = input.query?.trim();
+  if (!query) throw new AgentError("Say what to search for.");
+
+  const boardIds = input.boardName ? [resolveBoard(scope, input.boardName).id] : scope.boardIds;
+  if (!boardIds.length) return { query, returned: 0, hits: [] };
+
+  // Clients are named, not id'd, in every agent-facing surface.
+  let clientId: string | null = null;
+  if (input.clientName) {
+    const wanted = input.clientName.trim().toLowerCase();
+    const rows = await db.select({ id: clients.id, name: clients.name }).from(clients);
+    const match =
+      rows.find((row) => row.name.toLowerCase() === wanted) ??
+      rows.find((row) => row.name.toLowerCase().includes(wanted));
+    if (!match) {
+      throw new AgentError(
+        `No client called "${input.clientName}". Known clients: ${rows
+          .map((row) => row.name)
+          .join(", ")}.`,
+      );
+    }
+    clientId = match.id;
+  }
+
+  const limit = Math.min(Math.max(input.limit ?? 10, 1), 25);
+  const { rows, vectorEnabled } = await semanticSearch({
+    query,
+    boardIds,
+    clientId,
+    sourceTypes: input.kinds ?? undefined,
+    limit,
+  });
+
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = toAgentHits(rows, terms);
+
+  // Titles read better than ids in a spoken answer, so resolve them here.
+  const clientRows = await db.select({ id: clients.id, name: clients.name }).from(clients);
+  const clientNameById = new Map(clientRows.map((row) => [row.id, row.name]));
+
+  return {
+    query,
+    /** False when embeddings are unavailable, so the model can say so. */
+    semanticAvailable: vectorEnabled,
+    returned: hits.length,
+    hits: hits.map((hit) => ({
+      kind: hit.kind,
+      title: hit.title,
+      snippet: hit.snippet,
+      client: hit.clientId ? (clientNameById.get(hit.clientId) ?? null) : null,
+      matchedBy: hit.matchedBy,
+    })),
+  };
+}
+
+// ── Docs ──────────────────────────────────────────────────────────────────
+
+/**
+ * Docs are searched on their own, never mixed into task results. A doc is
+ * writing that belongs to a client; a task is work on a board. Answering one
+ * question with the other is the confusion this separation exists to prevent.
+ */
+export async function searchDocs(
+  scope: AgentScope,
+  input: { query: string; clientName?: string | null; limit?: number | null },
+) {
+  const query = input.query?.trim();
+  if (!query) throw new AgentError("Say what to search the docs for.");
+
+  const clientId = input.clientName ? resolveClient(scope, input.clientName).id : null;
+  const limit = Math.min(Math.max(input.limit ?? 10, 1), 25);
+
+  const { rows, vectorEnabled } = await semanticSearch({
+    query,
+    clientId,
+    sourceTypes: [...DOC_SOURCE_TYPES],
+    limit,
+  });
+
+  const docIds = [...new Set(rows.map((row) => row.row.docId).filter(Boolean))] as string[];
+  const docRows = docIds.length ? await db.select().from(docs).where(inArray(docs.id, docIds)) : [];
+  const docById = new Map(docRows.map((row) => [row.id, row]));
+  const clientRows = await db.select({ id: clients.id, name: clients.name }).from(clients);
+  const clientNameById = new Map(clientRows.map((row) => [row.id, row.name]));
+
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return {
+    query,
+    semanticAvailable: vectorEnabled,
+    returned: rows.length,
+    hits: toAgentHits(rows, terms).map((hit) => {
+      const doc = hit.docId ? docById.get(hit.docId) : undefined;
+      return {
+        docTitle: doc?.title ?? hit.title,
+        /** "doc_title" matched the name, "doc_block" matched text inside it. */
+        matchedIn: hit.kind === "doc_title" ? "title" : "body",
+        snippet: hit.snippet,
+        client: doc?.clientId ? (clientNameById.get(doc.clientId) ?? null) : null,
+        matchedBy: hit.matchedBy,
+      };
+    }),
+  };
+}
+
+/** Resolves a spoken client name to exactly one client. */
+/**
+ * Resolves whatever the model passed — an id straight from the directory, or a
+ * spoken name — to exactly one client the user can act on.
+ *
+ * The directory ships every client's id, so the model should pass the id and
+ * this is a lookup. A name is still accepted because speech does not carry ids,
+ * and it is matched only within the user's own clients.
+ */
+export function resolveClient(scope: AgentScope, nameOrId: string) {
+  const wanted = nameOrId.trim().toLowerCase();
+  const known = scope.clients;
+  if (!known.length) {
+    throw new AgentError("You are not a member of any client's board yet.");
+  }
+
+  const byId = known.find((client) => client.id.toLowerCase() === wanted);
+  if (byId) return byId;
+
+  const exact = known.filter((client) => client.name.toLowerCase() === wanted);
+  if (exact.length === 1) return exact[0];
+
+  const partial = known.filter((client) => client.name.toLowerCase().includes(wanted));
+  if (partial.length === 1) return partial[0];
+  if (partial.length > 1) {
+    throw new AgentError(
+      `"${nameOrId}" matches several clients: ${partial.map((c) => c.name).join(", ")}. Which one?`,
+    );
+  }
+
+  const names = known.map((client) => client.name);
+  throw new AgentError(
+    `No client called "${nameOrId}".${didYouMean(nameOrId, names)} Your clients are: ${names.join(", ")}.`,
+  );
+}
+
+/** Lists a client's docs by name, so the model can offer real titles. */
+export async function listDocsTool(
+  scope: AgentScope,
+  input: { clientName?: string | null; limit?: number | null },
+) {
+  const clientId = input.clientName ? resolveClient(scope, input.clientName).id : null;
+  const limit = Math.min(Math.max(input.limit ?? 25, 1), 50);
+
+  const rows = await db
+    .select()
+    .from(docs)
+    .where(
+      clientId
+        ? and(eq(docs.clientId, clientId), isNull(docs.archivedAt))
+        : isNull(docs.archivedAt),
+    )
+    .orderBy(asc(docs.title));
+
+  const clientRows = await db.select({ id: clients.id, name: clients.name }).from(clients);
+  const clientNameById = new Map(clientRows.map((row) => [row.id, row.name]));
+  const blockCounts = await db.select({ docId: docBlocks.docId, id: docBlocks.id }).from(docBlocks);
+  const countByDoc = new Map<string, number>();
+  for (const row of blockCounts) {
+    countByDoc.set(row.docId, (countByDoc.get(row.docId) ?? 0) + 1);
+  }
+
+  return {
+    total: rows.length,
+    returned: Math.min(rows.length, limit),
+    docs: rows.slice(0, limit).map((doc) => ({
+      title: doc.title,
+      client: clientNameById.get(doc.clientId) ?? null,
+      blocks: countByDoc.get(doc.id) ?? 0,
+      updatedAt: doc.updatedAt ? doc.updatedAt.toISOString() : null,
+    })),
+  };
+}
+
+/** Reads one doc's text back, block by block, resolved by title. */
+export async function readDoc(
+  scope: AgentScope,
+  input: { docTitle: string; clientName?: string | null },
+) {
+  const doc = await resolveDocByTitle(scope, input.docTitle, input.clientName);
+  const blocks = await db
+    .select()
+    .from(docBlocks)
+    .where(eq(docBlocks.docId, doc.id))
+    .orderBy(asc(docBlocks.position));
+
+  const client = await db.query.clients.findFirst({ where: eq(clients.id, doc.clientId) });
+  return {
+    title: doc.title,
+    client: client?.name ?? null,
+    updatedAt: doc.updatedAt ? doc.updatedAt.toISOString() : null,
+    blocks: blocks.map((block) => ({
+      position: block.position,
+      type: block.type,
+      level: block.level,
+      text: block.text,
+    })),
+  };
+}
+
+/**
+ * Resolves a doc by title, consulting meaning as well as wording so a spoken
+ * description reaches the right document.
+ */
+export async function resolveDocByTitle(
+  scope: AgentScope,
+  docTitle: string,
+  clientName?: string | null,
+) {
+  const clientId = clientName ? resolveClient(scope, clientName).id : null;
+  const all = await db
+    .select()
+    .from(docs)
+    .where(
+      clientId
+        ? and(eq(docs.clientId, clientId), isNull(docs.archivedAt))
+        : isNull(docs.archivedAt),
+    );
+
+  const needle = docTitle.trim().toLowerCase();
+  const exact = all.filter((doc) => doc.title.toLowerCase() === needle);
+  const partial = all.filter((doc) => doc.title.toLowerCase().includes(needle));
+  const candidates = exact.length ? exact : partial;
+
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length > 1) {
+    throw new AgentError(
+      `"${docTitle}" matches several docs: ${candidates.map((doc) => doc.title).join("; ")}. Which one?`,
+    );
+  }
+
+  // Nothing matched by wording, so ask the index what this sounds like.
+  const { rows } = await semanticSearch({
+    query: docTitle,
+    clientId,
+    sourceTypes: [...DOC_SOURCE_TYPES],
+    limit: 6,
+  });
+  const suggested: string[] = [];
+  const byId = new Map(all.map((doc) => [doc.id, doc]));
+  for (const row of rows) {
+    const doc = row.row.docId ? byId.get(row.row.docId) : undefined;
+    if (doc && !suggested.includes(doc.title)) suggested.push(doc.title);
+    if (suggested.length === 3) break;
+  }
+  throw new AgentError(
+    suggested.length
+      ? `No doc titled "${docTitle}". Closest by meaning: ${suggested.join("; ")}. Which one?`
+      : `No doc matching "${docTitle}".`,
+  );
 }

@@ -50,7 +50,7 @@ export function SettingsView({
               <div className="rounded-[14px] bg-[#f5f9ff] px-4 py-4">
                 <div className="text-sm font-semibold">Voice planner</div>
                 <div className="mt-1.5 text-sm text-muted">
-                  Voice changes use the same authenticated tool registry as Buzzinga’s text agent.
+                  Voice changes use the same authenticated tool registry as Squirrl’s text agent.
                 </div>
               </div>
             </div>
@@ -64,7 +64,7 @@ export function SettingsView({
           {section === "Notifications" && (
             <div className="mt-6 rounded-[14px] bg-slate-50 p-5 text-sm leading-6 text-muted">
               Task, comment, mention, assignment, move, and priority updates continue through
-              Buzzinga’s real notification digest queue.
+              Squirrl’s real notification digest queue.
             </div>
           )}
           {section === "Team" && (
@@ -92,7 +92,7 @@ export function SettingsView({
           </div>
         </section>
         <div className="flex items-center gap-2 text-sm text-muted">
-          <LogOut className="h-4 w-4" aria-hidden /> Session controls use Buzzinga authentication.
+          <LogOut className="h-4 w-4" aria-hidden /> Session controls use Squirrl authentication.
         </div>
       </div>
     </div>

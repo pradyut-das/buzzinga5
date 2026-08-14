@@ -1,6 +1,7 @@
 import { TASK_PRIORITIES, type TaskPriority, type TaskStatus } from "@/db/schema";
 import { AgentError, type AgentScope } from "@/lib/agent/scope";
 import * as read from "@/lib/agent/read-tools";
+import type { SearchSourceType } from "@/lib/search/semantic";
 import * as write from "@/lib/agent/write-tools";
 import type { PreparedMutation } from "@/lib/agent/write-tools";
 
@@ -22,6 +23,9 @@ const str = (description: string) => ({ type: "string", description });
 const bool = (description: string) => ({ type: "boolean", description });
 const num = (description: string) => ({ type: "number", description });
 const board = str("Board title. Omit only when you are a member of exactly one board.");
+const clientRef = str(
+  "The client. Pass the client's id from the directory whenever you have it — that filters exactly. A spoken name also works and is matched against your own clients.",
+);
 const priorityEnum = { type: "string", enum: [...TASK_PRIORITIES] };
 
 function object(properties: Record<string, unknown>, required: string[] = []) {
@@ -65,6 +69,61 @@ export const READ_TOOLS: ToolDeclaration[] = [
       hasDueDate: bool("True for tasks that have a due date, false for those that do not."),
       limit: num("Maximum rows to return, 1 to 50. Defaults to 25."),
     }),
+  },
+  {
+    name: "semantic_search",
+    description:
+      "Search TASKS and the conversation around them by meaning rather than by exact words — task titles, task briefs, comments, media and clients. Use when the user describes work in their own language ('the reel that keeps slipping') instead of quoting a title. This never returns docs: use search_docs for writing. Prefer search_tasks when the question is a filter (overdue, unassigned, one column).",
+    parametersJsonSchema: object(
+      {
+        query: str(
+          "What to look for, in the user's own words. A phrase works better than one word.",
+        ),
+        clientName: clientRef,
+        boardName: board,
+        kinds: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["task_title", "task_block", "comment", "asset", "client"],
+          },
+          description:
+            "Limit to these kinds of match. task_title is the task name, task_block is text inside its brief.",
+        },
+        limit: num("Maximum rows to return, 1 to 25. Defaults to 10."),
+      },
+      ["query"],
+    ),
+  },
+  {
+    name: "search_docs",
+    description:
+      "Search the client docs by meaning and by wording. Docs are writing that belongs to a client — briefs, notes, strategy — and are a SEPARATE thing from tasks: this never returns tasks, and task searches never return docs. Reports whether each hit matched the doc's title or text inside its body.",
+    parametersJsonSchema: object(
+      {
+        query: str("What to look for, in the user's own words."),
+        clientName: clientRef,
+        limit: num("Maximum rows to return, 1 to 25. Defaults to 10."),
+      },
+      ["query"],
+    ),
+  },
+  {
+    name: "list_docs",
+    description:
+      "List docs with their client, block count and when they were last edited. Use to learn real doc titles before reading or changing one.",
+    parametersJsonSchema: object({
+      clientName: clientRef,
+      limit: num("Maximum rows to return, 1 to 50. Defaults to 25."),
+    }),
+  },
+  {
+    name: "read_doc",
+    description:
+      "Read one doc back block by block, with each block's type and text. Use when the user asks what a doc says, or before appending to it so you do not repeat what is already written.",
+    parametersJsonSchema: object({ docTitle: str("The doc title."), clientName: clientRef }, [
+      "docTitle",
+    ]),
   },
   {
     name: "get_task_details",
@@ -534,6 +593,60 @@ export const WRITE_TOOLS: ToolDeclaration[] = [
       ["boardName", "confirmTitle", "confirmed"],
     ),
   },
+  {
+    name: "create_doc",
+    description:
+      "Create a new doc for a client. A doc is writing, not a task — it never appears on a board and has no column, status or deadline. Use when the user wants to write something down rather than track work.",
+    parametersJsonSchema: object(
+      {
+        clientName: clientRef,
+        title: str("The doc title."),
+        body: str("Optional opening paragraph."),
+        confirmed,
+      },
+      ["clientName", "title"],
+    ),
+  },
+  {
+    name: "append_to_doc",
+    description:
+      "Add a paragraph to the end of an existing doc. Read the doc first if you need to avoid repeating what it already says.",
+    parametersJsonSchema: object(
+      {
+        docTitle: str("The doc title."),
+        text: str("The paragraph to add."),
+        clientName: clientRef,
+        confirmed,
+      },
+      ["docTitle", "text"],
+    ),
+  },
+  {
+    name: "rename_doc",
+    description: "Rename one doc.",
+    parametersJsonSchema: object(
+      {
+        docTitle: str("The current doc title."),
+        newTitle: str("The new title."),
+        clientName: clientRef,
+        confirmed,
+      },
+      ["docTitle", "newTitle"],
+    ),
+  },
+  {
+    name: "delete_doc",
+    description:
+      "Delete one doc and everything written in it. Irreversible, so always read the summary back and get an explicit yes first.",
+    parametersJsonSchema: object(
+      {
+        docTitle: str("The doc title."),
+        clientName: clientRef,
+        confirmed,
+      },
+      ["docTitle"],
+    ),
+  },
 ];
 
 export const ALL_TOOLS: ToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS];
@@ -562,6 +675,18 @@ function priorityListOf(value: JsonValue): TaskPriority[] | null {
 function text(value: JsonValue): string {
   const result = typeof value === "string" ? value.trim() : "";
   return result;
+}
+
+const SOURCE_KINDS = ["task_title", "task_block", "comment", "asset", "client"] as const;
+
+/** Drops anything the model invents that is not an indexed block kind. */
+function sourceKindsOf(value: JsonValue): SearchSourceType[] | null {
+  if (!Array.isArray(value)) return null;
+  const kinds = value.filter(
+    (entry): entry is SearchSourceType =>
+      typeof entry === "string" && (SOURCE_KINDS as readonly string[]).includes(entry),
+  );
+  return kinds.length ? kinds : null;
 }
 
 function optional(value: JsonValue): string | null {
@@ -750,6 +875,29 @@ async function prepareMutation(
         remove: Boolean(input.remove),
         boardName: optional(input.boardName),
       });
+    case "create_doc":
+      return write.createDoc(scope, {
+        clientName: text(input.clientName),
+        title: text(input.title),
+        body: optional(input.body),
+      });
+    case "append_to_doc":
+      return write.appendToDoc(scope, {
+        docTitle: text(input.docTitle),
+        text: text(input.text),
+        clientName: optional(input.clientName),
+      });
+    case "rename_doc":
+      return write.renameDoc(scope, {
+        docTitle: text(input.docTitle),
+        newTitle: text(input.newTitle),
+        clientName: optional(input.clientName),
+      });
+    case "delete_doc":
+      return write.deleteDoc(scope, {
+        docTitle: text(input.docTitle),
+        clientName: optional(input.clientName),
+      });
     case "add_comment":
       return write.addComment(scope, {
         taskTitle: text(input.taskTitle),
@@ -787,6 +935,30 @@ async function runReadTool(name: string, scope: AgentScope, input: ToolInput): P
         overdue: input.overdue === true,
         hasDueDate: typeof input.hasDueDate === "boolean" ? input.hasDueDate : null,
         limit: typeof input.limit === "number" ? input.limit : null,
+      });
+    case "semantic_search":
+      return read.semanticSearchTool(scope, {
+        query: text(input.query),
+        clientName: optional(input.clientName),
+        boardName: optional(input.boardName),
+        kinds: sourceKindsOf(input.kinds),
+        limit: typeof input.limit === "number" ? input.limit : null,
+      });
+    case "search_docs":
+      return read.searchDocs(scope, {
+        query: text(input.query),
+        clientName: optional(input.clientName),
+        limit: typeof input.limit === "number" ? input.limit : null,
+      });
+    case "list_docs":
+      return read.listDocsTool(scope, {
+        clientName: optional(input.clientName),
+        limit: typeof input.limit === "number" ? input.limit : null,
+      });
+    case "read_doc":
+      return read.readDoc(scope, {
+        docTitle: text(input.docTitle),
+        clientName: optional(input.clientName),
       });
     case "get_task_details":
       return read.getTaskDetails(scope, text(input.taskTitle), optional(input.boardName));

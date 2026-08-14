@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   boardMembers,
   boards,
+  clients,
   columns,
   contributors,
   tags,
@@ -24,16 +25,25 @@ export interface AgentScope {
   userEmail: string;
   /** Board ids the user is a member of. Every tool is confined to these. */
   boardIds: string[];
-  boards: { id: string; title: string; role: string }[];
+  boards: { id: string; title: string; role: string; clientId: string | null }[];
+  /** The clients behind those boards, so a spoken name resolves to an id. */
+  clients: { id: string; name: string; boardId: string }[];
 }
 
 export async function getAgentScope(): Promise<AgentScope> {
   const user = await requireUser();
 
   const rows = await db
-    .select({ id: boards.id, title: boards.title, role: boardMembers.role })
+    .select({
+      id: boards.id,
+      title: boards.title,
+      role: boardMembers.role,
+      clientId: boards.clientId,
+      clientName: clients.name,
+    })
     .from(boardMembers)
     .innerJoin(boards, eq(boards.id, boardMembers.boardId))
+    .leftJoin(clients, eq(clients.id, boards.clientId))
     .where(eq(boardMembers.userId, user.id));
 
   return {
@@ -41,7 +51,15 @@ export async function getAgentScope(): Promise<AgentScope> {
     userName: user.name,
     userEmail: user.email,
     boardIds: rows.map((row) => row.id),
-    boards: rows,
+    boards: rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      role: row.role,
+      clientId: row.clientId,
+    })),
+    clients: rows
+      .filter((row) => row.clientId && row.clientName)
+      .map((row) => ({ id: row.clientId!, name: row.clientName!, boardId: row.id })),
   };
 }
 
@@ -139,10 +157,19 @@ export function resolveBoard(scope: AgentScope, boardName?: string | null) {
 export interface AgentDirectory {
   today: string;
   user: { name: string; email: string };
+  /**
+   * The clients this user can act on, with the id every client-scoped tool
+   * takes. Spoken names are matched against `name`; `id` is what gets passed,
+   * so "Aakansha's docs" filters by id rather than by a re-typed string.
+   */
+  clients: { id: string; name: string; boardId: string; boardTitle: string }[];
   boards: {
     id: string;
     title: string;
     role: string;
+    /** The client this board belongs to; null for a board with no client. */
+    clientId: string | null;
+    clientName: string | null;
     columns: string[];
     contributors: string[];
     tags: string[];
@@ -242,9 +269,17 @@ export async function getAgentDirectory(scope: AgentScope): Promise<AgentDirecto
     tagsByTask.set(row.taskId, [...(tagsByTask.get(row.taskId) ?? []), row.name]);
   }
 
+  const clientNameById = new Map(scope.clients.map((client) => [client.id, client.name]));
+
   return {
     today: new Date().toISOString().slice(0, 10),
     user: { name: scope.userName, email: scope.userEmail },
+    clients: scope.clients.map((client) => ({
+      id: client.id,
+      name: client.name,
+      boardId: client.boardId,
+      boardTitle: scope.boards.find((board) => board.id === client.boardId)?.title ?? client.name,
+    })),
     boards: scope.boards.map((board) => {
       const boardColumns = allColumns
         .filter((c) => c.boardId === board.id)
@@ -260,6 +295,8 @@ export async function getAgentDirectory(scope: AgentScope): Promise<AgentDirecto
         id: board.id,
         title: board.title,
         role: board.role,
+        clientId: board.clientId,
+        clientName: board.clientId ? (clientNameById.get(board.clientId) ?? null) : null,
         columns: boardColumns.map((c) => c.name),
         contributors: allContributors.filter((c) => c.boardId === board.id).map((c) => c.name),
         tags: allTags.filter((t) => t.boardId === board.id).map((t) => t.name),

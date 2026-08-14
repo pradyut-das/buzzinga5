@@ -8,6 +8,7 @@ import {
   columns,
   comments,
   contributors,
+  docs,
   tags,
   taskAssignees,
   taskCategories,
@@ -38,6 +39,9 @@ import {
   type AgentScope,
 } from "@/lib/agent/scope";
 import { contentFromPlainText } from "@/lib/agent/text";
+import { semanticSearch, TASK_SOURCE_TYPES } from "@/lib/search/semantic";
+import { createDocument, deleteDocument, renameDocument, saveDocument } from "@/actions/docs";
+import { resolveClient, resolveDocByTitle } from "@/lib/agent/read-tools";
 
 /**
  * Every mutation is prepared before it runs. The first tool call always returns
@@ -64,17 +68,38 @@ async function findTask(scope: AgentScope, taskTitle: string, boardName?: string
   const rows = await db.select().from(tasks).where(inArray(tasks.boardId, boardIds));
   const needle = taskTitle.trim().toLowerCase();
   const exact = rows.filter((task) => task.title.toLowerCase() === needle);
-  const candidates = exact.length
-    ? exact
-    : rows.filter((task) => task.title.toLowerCase().includes(needle));
+  const substring = rows.filter((task) => task.title.toLowerCase().includes(needle));
+
+  // A write resolves by wording first. Meaning is consulted every time, but
+  // only ever to *offer* candidates: silently mutating the task an embedding
+  // suggested is not something the user can undo by saying "no".
+  const candidates = exact.length ? exact : substring;
 
   if (!candidates.length) {
-    // A miss is usually a mishearing, so offer the nearest titles as a question.
+    // Spoken requests describe work rather than quote it, so before giving up
+    // ask the index what this sounds like. The suggestions are offered as a
+    // question, never acted on — a write still needs the user to confirm.
+    const byId = new Map(rows.map((task) => [task.id, task]));
+    const { rows: hits } = await semanticSearch({
+      query: taskTitle,
+      boardIds,
+      sourceTypes: [...TASK_SOURCE_TYPES],
+      limit: 8,
+    });
+    const suggested: string[] = [];
+    for (const hit of hits) {
+      const task = hit.row.taskId ? byId.get(hit.row.taskId) : undefined;
+      if (task && !suggested.includes(task.title)) suggested.push(task.title);
+      if (suggested.length === 3) break;
+    }
+
     throw new AgentError(
-      `No task matching "${taskTitle}".${didYouMean(
-        taskTitle,
-        rows.map((task) => task.title),
-      )}`,
+      suggested.length
+        ? `No task titled "${taskTitle}". Closest by meaning: ${suggested.join("; ")}. Which one?`
+        : `No task matching "${taskTitle}".${didYouMean(
+            taskTitle,
+            rows.map((task) => task.title),
+          )}`,
     );
   }
   if (candidates.length > 1) {
@@ -1179,6 +1204,94 @@ export function deleteBoard(
 
       revalidatePath("/");
       return `Deleted the board "${board.title}" and everything on it.`;
+    },
+  };
+}
+
+// ── Docs ──────────────────────────────────────────────────────────────────
+
+/** Appends one paragraph to a TipTap doc, returning the new JSON. */
+function appendParagraph(content: string | null, text: string): string {
+  const paragraph = { type: "paragraph", content: [{ type: "text", text }] };
+  if (!content?.trim().startsWith("{")) {
+    return JSON.stringify({ type: "doc", content: [paragraph] });
+  }
+  try {
+    const parsed = JSON.parse(content) as { type?: string; content?: unknown[] };
+    if (parsed?.type !== "doc" || !Array.isArray(parsed.content)) {
+      return JSON.stringify({ type: "doc", content: [paragraph] });
+    }
+    return JSON.stringify({ ...parsed, content: [...parsed.content, paragraph] });
+  } catch {
+    return JSON.stringify({ type: "doc", content: [paragraph] });
+  }
+}
+
+export function createDoc(
+  scope: AgentScope,
+  input: { clientName: string; title: string; body?: string | null },
+): PreparedMutation {
+  const title = input.title?.trim();
+  if (!title) throw new AgentError("What should the doc be called?");
+
+  return {
+    summary: `Create a doc "${title}" for ${input.clientName}${input.body ? " with an opening paragraph" : ""}.`,
+    run: async () => {
+      const client = resolveClient(scope, input.clientName);
+      const docId = await createDocument({ clientId: client.id, title });
+      if (input.body?.trim()) {
+        const doc = await db.query.docs.findFirst({ where: eq(docs.id, docId) });
+        await saveDocument(docId, appendParagraph(doc?.content ?? null, input.body.trim()));
+      }
+      return `Created the doc "${title}" for ${client.name}.`;
+    },
+  };
+}
+
+export function appendToDoc(
+  scope: AgentScope,
+  input: { docTitle: string; clientName?: string | null; text: string },
+): PreparedMutation {
+  const text = input.text?.trim();
+  if (!text) throw new AgentError("What should be added to the doc?");
+
+  return {
+    summary: `Add a paragraph to the doc "${input.docTitle}": "${text.slice(0, 80)}${text.length > 80 ? "…" : ""}".`,
+    run: async () => {
+      const doc = await resolveDocByTitle(scope, input.docTitle, input.clientName);
+      await saveDocument(doc.id, appendParagraph(doc.content, text));
+      return `Added a paragraph to "${doc.title}".`;
+    },
+  };
+}
+
+export function renameDoc(
+  scope: AgentScope,
+  input: { docTitle: string; newTitle: string; clientName?: string | null },
+): PreparedMutation {
+  const newTitle = input.newTitle?.trim();
+  if (!newTitle) throw new AgentError("What should the doc be called instead?");
+
+  return {
+    summary: `Rename the doc "${input.docTitle}" to "${newTitle}".`,
+    run: async () => {
+      const doc = await resolveDocByTitle(scope, input.docTitle, input.clientName);
+      await renameDocument(doc.id, newTitle);
+      return `Renamed "${doc.title}" to "${newTitle}".`;
+    },
+  };
+}
+
+export function deleteDoc(
+  scope: AgentScope,
+  input: { docTitle: string; clientName?: string | null },
+): PreparedMutation {
+  return {
+    summary: `Delete the doc "${input.docTitle}". This cannot be undone.`,
+    run: async () => {
+      const doc = await resolveDocByTitle(scope, input.docTitle, input.clientName);
+      await deleteDocument(doc.id);
+      return `Deleted the doc "${doc.title}".`;
     },
   };
 }
