@@ -51,7 +51,7 @@ export async function createBoard(title: string, password: string) {
   // Set password in HTTP-only cookie
   await setBoardPassword(id, password);
 
-  redirect(`/boards/${id}`);
+  redirect("/clients");
 }
 
 export async function getBoards() {

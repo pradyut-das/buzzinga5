@@ -5,6 +5,7 @@ import {
   Bell,
   CalendarDays,
   CircleHelp,
+  FileText,
   Home,
   Menu,
   Search,
@@ -15,12 +16,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import type { ClientSummary } from "@/lib/agency/queries";
+import { useEffect, useState } from "react";
+import { openSearchPalette } from "@/components/search/search-palette";
 
 const NAV: Array<{ href: string; label: string; Icon: LucideIcon }> = [
   { href: "/", label: "Home", Icon: Home },
   { href: "/clients", label: "Clients", Icon: Users },
+  { href: "/docs", label: "Docs", Icon: FileText },
   { href: "/calendar", label: "Calendar", Icon: CalendarDays },
   { href: "/notifications", label: "Notifications", Icon: Bell },
   { href: "/settings", label: "Settings", Icon: Settings },
@@ -39,9 +41,11 @@ function Brand() {
   );
 }
 
+/** A doc under a client still belongs to Docs, so it wins over Clients. */
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
-  if (href === "/clients") return pathname.startsWith("/clients") || pathname.startsWith("/boards");
+  if (href === "/docs") return pathname.startsWith("/docs") || pathname.includes("/docs/");
+  if (href === "/clients") return pathname.startsWith("/clients") && !pathname.includes("/docs/");
   return pathname.startsWith(href);
 }
 
@@ -72,108 +76,10 @@ function Navigation({ pathname, close }: { pathname: string; close?: () => void 
   );
 }
 
-function CommandPalette({
-  open,
-  setOpen,
-  clients,
-}: {
-  open: boolean;
-  setOpen: (open: boolean) => void;
-  clients: ClientSummary[];
-}) {
-  const router = useRouter();
-  const [query, setQuery] = useState("");
-
-  useEffect(() => {
-    if (!open) setQuery("");
-  }, [open]);
-
-  const results = useMemo(() => {
-    const value = query.trim().toLowerCase();
-    return clients
-      .filter((client) => !value || client.name.toLowerCase().includes(value))
-      .slice(0, 8);
-  }, [clients, query]);
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-[80] flex items-start justify-center bg-slate-950/20 px-4 pt-[12vh]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onMouseDown={() => setOpen(false)}
-        >
-          <motion.section
-            role="dialog"
-            aria-modal="true"
-            aria-label="Search"
-            className="w-full max-w-xl overflow-hidden rounded-[18px] border border-line bg-white shadow-modal"
-            initial={{ opacity: 0, scale: 0.98, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -8 }}
-            transition={{ duration: 0.18 }}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 border-b border-line px-4">
-              <Search className="h-5 w-5 text-slate-400" aria-hidden />
-              <input
-                autoFocus
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search clients…"
-                className="h-14 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-400"
-              />
-              <kbd className="rounded-md border border-line bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
-                ESC
-              </kbd>
-            </div>
-            <div className="app-scrollbar max-h-[420px] overflow-auto p-2">
-              {results.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted">No results</div>
-              ) : (
-                results.map((client) => (
-                  <button
-                    type="button"
-                    key={client.id}
-                    className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left hover:bg-slate-50"
-                    onClick={() => {
-                      router.push(`/clients/${client.id}`);
-                      setOpen(false);
-                    }}
-                  >
-                    <span>
-                      <span className="block text-sm font-medium text-ink">{client.name}</span>
-                      <span className="mt-0.5 block text-xs text-muted">
-                        {client.openTasks} open tasks
-                      </span>
-                    </span>
-                    <span className="rounded-md bg-slate-50 px-2 py-1 text-[11px] text-slate-500">
-                      Client
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </motion.section>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-export function ClientRail({
-  clients,
-  children,
-}: {
-  clients: ClientSummary[];
-  children: React.ReactNode;
-}) {
+export function ClientRail({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [commandOpen, setCommandOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
@@ -182,12 +88,8 @@ export function ClientRail({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setCommandOpen(true);
-      }
+      // ⌘K is handled by the global SearchPalette.
       if (event.key === "Escape") {
-        setCommandOpen(false);
         setHelpOpen(false);
         setMobileOpen(false);
       }
@@ -220,7 +122,7 @@ export function ClientRail({
               type="button"
               aria-label="Search"
               title="Search (⌘K)"
-              onClick={() => setCommandOpen(true)}
+              onClick={() => openSearchPalette()}
               className="grid h-11 w-11 place-items-center rounded-full border border-line bg-white text-ink hover:bg-slate-50"
             >
               <Search className="h-[19px] w-[19px]" aria-hidden />
@@ -279,8 +181,6 @@ export function ClientRail({
           </motion.div>
         )}
       </AnimatePresence>
-
-      <CommandPalette open={commandOpen} setOpen={setCommandOpen} clients={clients} />
 
       <AnimatePresence>
         {helpOpen && (

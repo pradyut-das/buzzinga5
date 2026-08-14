@@ -44,7 +44,7 @@ export function RecentBoards({ onOpen }: { onOpen?: (boardId: string) => void } 
           {boards.map((board) => (
             <li key={board.id} className="group relative">
               <Link
-                href={`/boards/${board.id}`}
+                href="/clients"
                 className="flex items-center justify-between rounded-lg px-3 py-2 transition-colors hover:bg-white/60 dark:hover:bg-white/10"
                 onClick={
                   onOpen

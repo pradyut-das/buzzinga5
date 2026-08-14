@@ -2,9 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 /**
- * Refreshes the Supabase session on every matched request, and gates boards
- * behind an account. `BoardsLayout` and `canAccessBoard()` still do the real
- * authorization — this only avoids rendering a board shell for signed-out users.
+ * Refreshes the Supabase session on every matched request, and gates client
+ * work behind an account. The server actions still do the real authorization —
+ * this only avoids rendering a board shell for signed-out users.
  */
 export async function middleware(request: NextRequest) {
   const { supabaseResponse, user } = await updateSession(request);
@@ -26,5 +26,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/boards/:path*"],
+  matcher: ["/clients/:path*"],
 };

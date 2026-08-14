@@ -25,7 +25,7 @@ export function NotificationsView({ notifications }: { notifications: Notificati
     const Icon = iconMap[item.type];
     return (
       <Link
-        href={`/boards/${item.boardId}`}
+        href="/clients"
         className="grid w-full grid-cols-[auto_1fr_auto] items-center gap-4 border-b border-line bg-[#fffaf0] px-4 py-4 text-left last:border-b-0 sm:px-5"
       >
         <div className="flex items-center gap-3">
