@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, primaryKey, index } from "drizzle-orm/sqlite-core";
 import { relations } from "drizzle-orm";
 
 // ============================================================
@@ -841,3 +841,112 @@ export const scheduledPostsRelations = relations(scheduledPosts, ({ one }) => ({
     references: [assets.id],
   }),
 }));
+
+// ── Docs ───────────────────────────────────────────────────────────────────
+// A doc is writing that belongs to a client. It is deliberately NOT a task:
+// tasks are work with a column, a status and a deadline, while a doc is prose
+// that may describe work, brief it, or have nothing to do with any single
+// piece of it. `taskId` is an optional link for the cases where a doc really is
+// one task's brief; it is never required, and a doc is never listed as a task.
+
+export const docs = sqliteTable("docs", {
+  id: text("id").primaryKey(), // UUID
+  clientId: text("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "cascade" }),
+  /** Optional: the one task this doc briefs, when it briefs one at all. */
+  taskId: text("task_id").references(() => tasks.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  /** TipTap JSON for the whole document. `docBlocks` is the flattened form. */
+  content: text("content"),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  archivedAt: integer("archived_at", { mode: "timestamp" }),
+});
+
+/**
+ * One row per top-level block of a doc, rewritten whenever the doc is saved.
+ *
+ * Blocks are persisted rather than derived so a deep link can name a block that
+ * survives editing: `blockId` is stable for the life of the block, where a
+ * positional index shifts the moment something is inserted above it.
+ */
+export const docBlocks = sqliteTable(
+  "doc_blocks",
+  {
+    id: text("id").primaryKey(), // UUID, stable across edits
+    docId: text("doc_id")
+      .notNull()
+      .references(() => docs.id, { onDelete: "cascade" }),
+    /** Position in the document, 0-based. Rewritten on every save. */
+    position: integer("position").notNull(),
+    /** TipTap node type: paragraph, heading, bulletList, blockquote, ... */
+    type: text("type").notNull(),
+    /** Heading level where the type carries one. */
+    level: integer("level"),
+    /** Plain text of the block, which is what search indexes. */
+    text: text("text").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+  },
+  (table) => [index("doc_blocks_doc_position_idx").on(table.docId, table.position)],
+);
+
+export const docsRelations = relations(docs, ({ one, many }) => ({
+  client: one(clients, {
+    fields: [docs.clientId],
+    references: [clients.id],
+  }),
+  task: one(tasks, {
+    fields: [docs.taskId],
+    references: [tasks.id],
+  }),
+  author: one(users, {
+    fields: [docs.createdBy],
+    references: [users.id],
+  }),
+  blocks: many(docBlocks),
+}));
+
+export const docBlocksRelations = relations(docBlocks, ({ one }) => ({
+  doc: one(docs, {
+    fields: [docBlocks.docId],
+    references: [docs.id],
+  }),
+}));
+
+// ── Docs search index ──────────────────────────────────────────────────────
+// One row per searchable unit: a task title, a block of a task doc, a comment,
+// an asset, a topic, a community, a broadcast or a client. Kept in step with
+// the source tables by src/lib/search/indexer.ts; ids are deterministic
+// (sourceType:sourceId:suffix) so a re-index is a clean delete+insert.
+
+export const SEARCH_SOURCE_TYPES = [
+  "task_title",
+  "task_block",
+  "doc_title",
+  "doc_block",
+  "comment",
+  "asset",
+  "topic",
+  "community",
+  "broadcast",
+  "client",
+] as const;
+export type SearchSourceType = (typeof SEARCH_SOURCE_TYPES)[number];
+
+export const searchBlocks = sqliteTable("search_blocks", {
+  id: text("id").primaryKey(), // deterministic: sourceType:sourceId:suffix
+  sourceType: text("source_type").notNull().$type<SearchSourceType>(),
+  sourceId: text("source_id").notNull(),
+  blockId: text("block_id"),
+  blockIndex: integer("block_index"),
+  boardId: text("board_id"),
+  clientId: text("client_id"),
+  taskId: text("task_id"),
+  docId: text("doc_id"),
+  sourceTitle: text("source_title").notNull(),
+  content: text("content").notNull(),
+  contentHash: text("content_hash").notNull(),
+  indexedAt: integer("indexed_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+});

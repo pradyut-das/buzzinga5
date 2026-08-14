@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/db";
 import {
   assets,
@@ -20,6 +20,9 @@ import {
   taskCollaborators,
   taskStakeholders,
   topics,
+  users,
+  docBlocks,
+  docs,
   type AssetSlide,
   type TaskStatus,
 } from "@/db/schema";
@@ -328,6 +331,109 @@ export async function getTaskWorkspace(taskId: string) {
 }
 
 export type TaskWorkspace = NonNullable<Awaited<ReturnType<typeof getTaskWorkspace>>>;
+
+export interface DocSummary {
+  id: string;
+  title: string;
+  clientId: string;
+  clientName: string | null;
+  /** The one task this doc briefs, when it briefs one. */
+  taskId: string | null;
+  blockCount: number;
+  snippet: string;
+  updatedAt: Date | null;
+}
+
+/**
+ * Every doc in the workspace. Docs are their own rows now — writing that
+ * belongs to a client — so this no longer reads tasks at all.
+ */
+export async function listDocs(clientId?: string): Promise<DocSummary[]> {
+  const rows = await db
+    .select()
+    .from(docs)
+    .where(
+      clientId
+        ? and(eq(docs.clientId, clientId), isNull(docs.archivedAt))
+        : isNull(docs.archivedAt),
+    );
+  if (!rows.length) return [];
+
+  const [blockRows, clientRows] = await Promise.all([
+    db
+      .select()
+      .from(docBlocks)
+      .where(
+        inArray(
+          docBlocks.docId,
+          rows.map((row) => row.id),
+        ),
+      )
+      .orderBy(asc(docBlocks.position)),
+    db.query.clients.findMany({ where: isNull(clients.archivedAt) }),
+  ]);
+
+  const clientById = new Map(clientRows.map((row) => [row.id, row]));
+  const blocksByDoc = new Map<string, typeof blockRows>();
+  for (const block of blockRows) {
+    blocksByDoc.set(block.docId, [...(blocksByDoc.get(block.docId) ?? []), block]);
+  }
+
+  return rows
+    .map((doc) => {
+      const blocks = blocksByDoc.get(doc.id) ?? [];
+      const withText = blocks.filter((block) => block.text.trim().length > 0);
+      return {
+        id: doc.id,
+        title: doc.title,
+        clientId: doc.clientId,
+        clientName: clientById.get(doc.clientId)?.name ?? null,
+        taskId: doc.taskId,
+        blockCount: withText.length,
+        // The title is usually block 0, so the first body block reads better.
+        snippet: withText.find((block) => block.text !== doc.title)?.text ?? "",
+        updatedAt: doc.updatedAt,
+      };
+    })
+    .sort((a, b) => {
+      const client = (a.clientName ?? "").localeCompare(b.clientName ?? "");
+      return client || a.title.localeCompare(b.title);
+    });
+}
+
+export interface DocViewer {
+  doc: {
+    id: string;
+    title: string;
+    content: string | null;
+    updatedAt: Date | null;
+  };
+  client: { id: string; name: string; color: string } | null;
+  /** The task this doc briefs, when it briefs one. */
+  task: { id: string; title: string; status: TaskStatus } | null;
+  blockCount: number;
+}
+
+/** The single-doc read model: the writing and who it belongs to. */
+export async function getDocViewer(docId: string): Promise<DocViewer | null> {
+  const doc = await db.query.docs.findFirst({ where: eq(docs.id, docId) });
+  if (!doc || doc.archivedAt) return null;
+
+  const [client, task, blocks] = await Promise.all([
+    db.query.clients.findFirst({ where: eq(clients.id, doc.clientId) }),
+    doc.taskId
+      ? db.query.tasks.findFirst({ where: eq(tasks.id, doc.taskId) })
+      : Promise.resolve(undefined),
+    db.select().from(docBlocks).where(eq(docBlocks.docId, docId)),
+  ]);
+
+  return {
+    doc: { id: doc.id, title: doc.title, content: doc.content, updatedAt: doc.updatedAt },
+    client: client ? { id: client.id, name: client.name, color: client.color } : null,
+    task: task ? { id: task.id, title: task.title, status: task.status } : null,
+    blockCount: blocks.filter((block) => block.text.trim().length > 0).length,
+  };
+}
 
 export async function listCommunities() {
   const rows = await db
