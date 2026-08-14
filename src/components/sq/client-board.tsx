@@ -43,6 +43,7 @@ export function ClientBoard({
   nextDeadline,
   columns,
   categories,
+  actions,
   children,
 }: {
   clientId: string;
@@ -52,6 +53,8 @@ export function ClientBoard({
   nextDeadline?: string | null;
   columns: BoardColumnView[];
   categories: { id: string; name: string; color: string }[];
+  /** Admin-only client controls, rendered beside Create. */
+  actions?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const router = useRouter();
@@ -210,7 +213,10 @@ export function ClientBoard({
           </div>
         </div>
         <div className="flex w-full max-w-[250px] flex-col items-end gap-3">
-          {board[0] && <PageCreateButton onClick={() => setCreatingColumnId(board[0].id)} />}
+          <div className="flex items-center gap-2.5">
+            {board[0] && <PageCreateButton onClick={() => setCreatingColumnId(board[0].id)} />}
+            {actions}
+          </div>
           <div className="w-full rounded-[16px] border border-line bg-white px-5 py-4 shadow-soft">
             <div className="text-xs text-muted">Client contact</div>
             <div className="mt-1 text-sm font-semibold">{contact ?? "—"}</div>

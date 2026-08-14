@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { createTask } from "@/actions/agency";
+import { createDocument } from "@/actions/docs";
 import { adminCreateClient } from "@/actions/admin";
 import { ModalShell, modalInputClass, modalLabelClass } from "@/components/reference/modal-shell";
 import type { CalendarClientOption } from "@/lib/agency/queries";
@@ -274,6 +275,105 @@ export function CreateCalendarTaskAction({ clients }: { clients: CalendarClientO
           ) : (
             <p className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-muted">
               Create a board for a client before adding calendar tasks.
+            </p>
+          )}
+        </ModalShell>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Creates a doc, which means creating the task it is the brief for. When
+ * `clientId` is fixed the picker disappears — on a client's own Docs tab there
+ * is nothing to choose.
+ */
+export function CreateDocAction({
+  clientId,
+  clients = [],
+}: {
+  clientId?: string;
+  clients?: { id: string; name: string }[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [title, setTitle] = useState("");
+  const [pickedClient, setPickedClient] = useState(clientId ?? clients[0]?.id ?? "");
+  const target = clientId ?? pickedClient;
+  const close = () => {
+    if (!pending) setOpen(false);
+  };
+
+  return (
+    <div className="shrink-0">
+      <PageCreateButton onClick={() => setOpen(true)} />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!target) return;
+          startTransition(async () => {
+            try {
+              const docId = await createDocument({ clientId: target, title });
+              setOpen(false);
+              setTitle("");
+              toast.success("Doc created");
+              router.push(`/clients/${target}/docs/${docId}`);
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Could not create doc");
+            }
+          });
+        }}
+      >
+        <ModalShell
+          open={open}
+          onClose={close}
+          title="Create doc"
+          description="Start a brief. It opens straight into the editor."
+          footer={
+            <ModalActions
+              pending={pending}
+              onCancel={close}
+              submitLabel="Create doc"
+              canSubmit={Boolean(target)}
+            />
+          }
+        >
+          {clientId || clients.length ? (
+            <div className="space-y-5">
+              <label className="block">
+                <span className={modalLabelClass}>Doc title</span>
+                <input
+                  autoFocus
+                  required
+                  maxLength={180}
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="What is this brief about?"
+                  className={modalInputClass}
+                />
+              </label>
+              {!clientId && (
+                <label className="block">
+                  <span className={modalLabelClass}>Client</span>
+                  <select
+                    required
+                    value={pickedClient}
+                    onChange={(event) => setPickedClient(event.target.value)}
+                    className={modalInputClass}
+                  >
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          ) : (
+            <p className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-muted">
+              Create a client before writing docs.
             </p>
           )}
         </ModalShell>

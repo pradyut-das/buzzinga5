@@ -11,6 +11,7 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { deleteBoardCascade, deleteClientCascade, deleteUserCascade } from "@/lib/admin/cascade";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hashPassword } from "@/lib/password-hash";
+import { indexClient } from "@/lib/search/indexer";
 
 /**
  * Top-level CRUD for the admin console. Every export starts with
@@ -166,15 +167,19 @@ export async function adminCreateClient(input: AdminClientInput): Promise<AdminR
     const parsed = clientSchema.safeParse(input);
     if (!parsed.success) return fail(parsed.error.issues[0].message);
 
-    await db.insert(clients).values({
-      id: randomUUID(),
-      name: parsed.data.name,
-      initials: parsed.data.initials.toUpperCase(),
-      color: parsed.data.color,
-      contact: parsed.data.contact || null,
-      cadence: parsed.data.cadence || null,
-      createdAt: new Date(),
-    });
+    const inserted = await db
+      .insert(clients)
+      .values({
+        id: randomUUID(),
+        name: parsed.data.name,
+        initials: parsed.data.initials.toUpperCase(),
+        color: parsed.data.color,
+        contact: parsed.data.contact || null,
+        cadence: parsed.data.cadence || null,
+        createdAt: new Date(),
+      })
+      .returning({ id: clients.id });
+    if (inserted[0]) void indexClient(inserted[0].id);
 
     return ok();
   });
@@ -199,6 +204,8 @@ export async function adminUpdateClient(
         cadence: parsed.data.cadence || null,
       })
       .where(eq(clients.id, clientId));
+
+    void indexClient(clientId);
 
     return ok();
   });

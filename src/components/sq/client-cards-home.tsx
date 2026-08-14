@@ -1,21 +1,14 @@
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-import { PageHeader } from "@/components/reference/page-header";
-import { CreateClientAction } from "@/components/reference/page-create-actions";
 import type { ClientSummary } from "@/lib/agency/queries";
 
-export function ClientCardsHome({
-  clients,
-  canCreate = false,
-}: {
-  clients: ClientSummary[];
-  canCreate?: boolean;
-}) {
+/**
+ * The client grid. The page above it owns the header, so this stays the same
+ * shape as `DocsList` — cards and an empty state.
+ */
+export function ClientCards({ clients }: { clients: ClientSummary[] }) {
   return (
-    <div className="mx-auto max-w-[1300px]">
-      <PageHeader title="Clients" description="Your active agency accounts.">
-        {canCreate && <CreateClientAction />}
-      </PageHeader>
+    <>
       {clients.length ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {clients.map((client) => (
@@ -65,6 +58,6 @@ export function ClientCardsHome({
           </p>
         </div>
       )}
-    </div>
+    </>
   );
 }
