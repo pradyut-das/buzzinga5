@@ -10,6 +10,7 @@ import {
   queueMentionNotifications,
   extractMentionIds,
 } from "@/lib/notifications";
+import { sendInstantNotifications } from "@/lib/send-instant-notification";
 import { requireTask, requireComment, requireContributor } from "@/lib/require-resource";
 import { indexComment, removeSource } from "@/lib/search/indexer";
 
@@ -71,13 +72,15 @@ export async function createComment(
 
   // Queue mention notifications for @mentioned contributors
   if (mentionedIds.length > 0) {
-    await queueMentionNotifications({
+    const queued = await queueMentionNotifications({
       boardId,
       taskId,
       mentionedIds,
       authorId,
       commentContent: content,
     });
+    // Naming someone is asking them a question; the digest is too slow for that.
+    await sendInstantNotifications(boardId, queued);
   }
 
   void indexComment(id);
@@ -119,13 +122,14 @@ export async function updateComment(
 
   // Queue mention notifications only for newly added mentions
   if (addedMentionIds.length > 0) {
-    await queueMentionNotifications({
+    const queued = await queueMentionNotifications({
       boardId,
       taskId: existingComment.taskId,
       mentionedIds: addedMentionIds,
       authorId,
       commentContent: content,
     });
+    await sendInstantNotifications(boardId, queued);
   }
 
   void indexComment(commentId);

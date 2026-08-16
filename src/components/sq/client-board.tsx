@@ -29,6 +29,13 @@ import { PageCreateButton } from "@/components/reference/page-create-actions";
 import { BoardCard, BoardCardOverlay, ColumnDropZone } from "@/components/sq/board-card";
 import type { BoardColumnView } from "@/lib/agency/queries";
 
+/**
+ * A client with no board yet still needs a way in — creating the task is what
+ * creates the board, so the header button opens the modal against this
+ * placeholder instead of a column that does not exist yet.
+ */
+const NEW_BOARD = "__new_board__";
+
 const DOTS = ["#94a3b8", "#3b82f6", "#f59e0b", "#38b27b", "#8d6cf7"];
 
 function findColumn(items: BoardColumnView[], taskId: string) {
@@ -153,7 +160,10 @@ export function ClientBoard({
 
   const submitTask = () => {
     const title = draft.trim();
-    const columnIndex = board.findIndex((column) => column.id === creatingColumnId);
+    const columnIndex =
+      creatingColumnId === NEW_BOARD
+        ? 0
+        : board.findIndex((column) => column.id === creatingColumnId);
     if (!title || !draftDueDate || columnIndex < 0) return;
     startTransition(async () => {
       await createTask(clientId, title, columnIndex, draftCategory || null, draftDueDate);
@@ -214,7 +224,7 @@ export function ClientBoard({
         </div>
         <div className="flex w-full max-w-[250px] flex-col items-end gap-3">
           <div className="flex items-center gap-2.5">
-            {board[0] && <PageCreateButton onClick={() => setCreatingColumnId(board[0].id)} />}
+            <PageCreateButton onClick={() => setCreatingColumnId(board[0]?.id ?? NEW_BOARD)} />
             {actions}
           </div>
           <div className="w-full rounded-[16px] border border-line bg-white px-5 py-4 shadow-soft">
@@ -243,6 +253,11 @@ export function ClientBoard({
           className="app-scrollbar flex gap-4 overflow-x-auto pb-3"
           aria-label={`${clientName} Kanban board`}
         >
+          {board.length === 0 && (
+            <div className="flex min-h-[220px] w-full items-center justify-center rounded-[16px] border border-dashed border-line px-6 text-center text-sm text-muted">
+              No board yet. Create the first task and the columns come with it.
+            </div>
+          )}
           {board.map((column, index) => (
             <section
               key={column.id}

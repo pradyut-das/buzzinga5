@@ -16,6 +16,8 @@ import { revalidatePath } from "next/cache";
 import { canAccessBoard, requireBoardAccess } from "@/lib/secure-board";
 import { getRandomContributorColor } from "@/lib/contributor-colors";
 import { queueAssignNotification } from "@/lib/notifications";
+import { currentContributorId } from "@/lib/auth/contributor";
+import { sendInstantNotifications } from "@/lib/send-instant-notification";
 import { requireTask, requireContributor } from "@/lib/require-resource";
 
 export async function createContributor(
@@ -70,11 +72,13 @@ export async function addAssignee(taskId: string, contributorId: string, boardId
   });
 
   // Queue notification for the new assignee
-  await queueAssignNotification({
+  const queued = await queueAssignNotification({
     boardId,
     taskId,
     assigneeId: contributorId,
+    assignedById: await currentContributorId(boardId),
   });
+  await sendInstantNotifications(boardId, queued);
 
   revalidatePath(`/boards/${boardId}`);
 }
@@ -122,6 +126,16 @@ export async function addStakeholder(taskId: string, contributorId: string, boar
     taskId,
     contributorId,
   });
+
+  // Being made a stakeholder is being put on the hook for something, so it is
+  // worth the same immediate note as being assigned.
+  const queued = await queueAssignNotification({
+    boardId,
+    taskId,
+    assigneeId: contributorId,
+    assignedById: await currentContributorId(boardId),
+  });
+  await sendInstantNotifications(boardId, queued);
 
   revalidatePath(`/boards/${boardId}`);
 }

@@ -241,11 +241,11 @@ test.describe("Email Notifications", () => {
 
     const emailMeta = emails[0];
     expect(emailMeta.fromEmail).toBeDefined();
-    expect(emailMeta.fromEmail).toBe("noreply@notifications.itacorubi.com");
+    expect(emailMeta.fromEmail).toBe("noreply@squirrl.itsdesignare.com");
 
     // Verify from address in full email response
     const { email } = await getEmailById(page, boardId, emailMeta.id);
-    expect(email.fromEmail).toBe("noreply@notifications.itacorubi.com");
+    expect(email.fromEmail).toBe("noreply@squirrl.itsdesignare.com");
   });
 
   test("should show email history link in board header", async ({ page }) => {
@@ -360,5 +360,36 @@ test.describe("Email Notifications", () => {
 
     const data = await response.json();
     expect(data.error).toBe("Unauthorized");
+  });
+
+  /**
+   * The unsubscribe route is reachable without a session by design: it is
+   * followed from an inbox. These drive it over HTTP; the delivery behaviour
+   * behind it (who gets held, who gets dropped) is covered by
+   * `pnpm verify:notifications`, which does not need the retired board UI.
+   */
+  test("unsubscribe rejects a missing token", async ({ page }) => {
+    const response = await page.request.get("/api/unsubscribe");
+    expect(response.status()).toBe(400);
+    expect(await response.text()).toContain("missing its token");
+  });
+
+  test("unsubscribe rejects an unknown token", async ({ page }) => {
+    const response = await page.request.get("/api/unsubscribe?token=not-a-real-token");
+    expect(response.status()).toBe(404);
+    expect(await response.text()).toContain("no longer valid");
+  });
+
+  test("unsubscribe needs no session", async ({ page, context }) => {
+    await context.clearCookies();
+    const response = await page.request.get("/api/unsubscribe?token=still-not-real");
+    // 404 for the unknown token, never 401: the token is the only credential.
+    expect(response.status()).toBe(404);
+  });
+
+  test("unsubscribe accepts the one-click POST mail clients send", async ({ page }) => {
+    const response = await page.request.post("/api/unsubscribe?token=not-a-real-token");
+    expect(response.status()).toBe(404);
+    expect(response.headers()["content-type"]).toContain("text/html");
   });
 });

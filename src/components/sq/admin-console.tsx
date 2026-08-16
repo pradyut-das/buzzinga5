@@ -4,7 +4,15 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { WorkspaceHeader } from "@/components/sq/workspace";
-import type { AdminBoard, AdminCategory, AdminClient, AdminUser } from "@/lib/admin/queries";
+import { AdminNav } from "@/components/sq/admin-nav";
+import { AdminTagsPanel } from "@/components/sq/admin-tags";
+import type {
+  AdminBoard,
+  AdminCategory,
+  AdminClient,
+  AdminTag,
+  AdminUser,
+} from "@/lib/admin/queries";
 import {
   adminClearBoardPassword,
   adminCreateCategory,
@@ -30,7 +38,7 @@ import {
  * with it (see `src/lib/admin/cascade.ts`).
  */
 
-type Tab = "users" | "clients" | "boards" | "categories";
+type Tab = "users" | "clients" | "boards" | "categories" | "tags";
 
 /** A delete only fires when the row's own name is typed back. */
 function confirmName(name: string): boolean {
@@ -44,12 +52,14 @@ export function AdminConsole({
   clients,
   boards,
   categories,
+  tags,
 }: {
   currentUserId: string;
   users: AdminUser[];
   clients: AdminClient[];
   boards: AdminBoard[];
   categories: AdminCategory[];
+  tags: AdminTag[];
 }) {
   const [tab, setTab] = useState<Tab>("users");
   const router = useRouter();
@@ -70,11 +80,13 @@ export function AdminConsole({
 
   return (
     <main className="sq-main">
-      <WorkspaceHeader crumb="Admin" />
+      <WorkspaceHeader crumb="Workspace" />
 
       <div className="sq-admin">
+        <AdminNav current="/admin/workspace" />
+
         <nav className="sq-admin-tabs">
-          {(["users", "clients", "boards", "categories"] as Tab[]).map((name) => (
+          {(["users", "clients", "boards", "categories", "tags"] as Tab[]).map((name) => (
             <button
               key={name}
               type="button"
@@ -84,7 +96,7 @@ export function AdminConsole({
               {name[0].toUpperCase() + name.slice(1)}
             </button>
           ))}
-          {pending && <span className="sq-tiny">Saving…</span>}
+          {pending && <span className="sq-sub">Saving…</span>}
         </nav>
 
         {tab === "users" && (
@@ -102,6 +114,7 @@ export function AdminConsole({
             confirm={confirmName}
           />
         )}
+        {tab === "tags" && <AdminTagsPanel tags={tags} boards={boards} />}
       </div>
     </main>
   );
@@ -130,7 +143,7 @@ function UsersPanel({
     <section className="sq-panel">
       <div className="sq-section-head">
         <h2>Users</h2>
-        <span className="sq-tiny">{users.length} accounts</span>
+        <span className="sq-sub">{users.length} accounts</span>
       </div>
 
       <form
@@ -215,7 +228,7 @@ function UsersPanel({
           )}
         </tbody>
       </table>
-      <p className="sq-tiny">
+      <p className="sq-sub">
         Admins come from the <code>ADMIN_EMAILS</code> environment variable, not from this table.
       </p>
     </section>
@@ -297,7 +310,7 @@ function ClientsPanel({
     <section className="sq-panel">
       <div className="sq-section-head">
         <h2>Clients</h2>
-        <span className="sq-tiny">{clients.length} on the roster</span>
+        <span className="sq-sub">{clients.length} on the roster</span>
       </div>
 
       <form
@@ -401,7 +414,7 @@ function ClientsPanel({
           )}
         </tbody>
       </table>
-      <p className="sq-tiny">
+      <p className="sq-sub">
         Deleting a client also deletes its boards, assets, posts, and communities. Archive instead
         when the work should stay readable.
       </p>
@@ -486,7 +499,7 @@ function BoardsPanel({
     <section className="sq-panel">
       <div className="sq-section-head">
         <h2>Boards</h2>
-        <span className="sq-tiny">{boards.length} boards</span>
+        <span className="sq-sub">{boards.length} boards</span>
       </div>
 
       <form
@@ -607,7 +620,7 @@ function BoardsPanel({
           )}
         </tbody>
       </table>
-      <p className="sq-tiny">
+      <p className="sq-sub">
         Deleting a board removes its tasks, comments, tags, contributors and columns. Assets made
         from those tasks survive, unlinked.
       </p>
@@ -699,7 +712,7 @@ function CategoriesPanel({
     <section className="sq-panel">
       <div className="sq-section-head">
         <h2>Task categories</h2>
-        <span className="sq-tiny">{categories.length} across all boards</span>
+        <span className="sq-sub">{categories.length} across all boards</span>
       </div>
 
       <form
@@ -794,7 +807,7 @@ function CategoriesPanel({
           )}
         </tbody>
       </table>
-      <p className="sq-tiny">
+      <p className="sq-sub">
         Deleting a category leaves its tasks in place — they just become uncategorized.
       </p>
     </section>

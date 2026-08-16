@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAgentScope } from "@/lib/agent/scope";
 import { ALL_TOOLS, runTool } from "@/lib/agent/tools";
+import { GEMINI_LIVE_MODEL } from "@/lib/agent/gemini";
+import { subjectFromScope } from "@/lib/ai/subject";
+import { recordAiUsage } from "@/lib/ai/usage";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +32,24 @@ export async function POST(request: Request) {
 
   try {
     const scope = await getAgentScope();
+    const startedAt = Date.now();
     const result = await runTool(scope, name, body.input ?? {});
+
+    // Tool calls from the voice session spend no tokens in this process, but
+    // they are the record of what the agent actually did on someone's boards.
+    // Logging them next to the model calls means one query answers both "what
+    // did this cost?" and "what changed, and who asked for it?".
+    await recordAiUsage({
+      subject: subjectFromScope(scope),
+      surface: "voice_tool",
+      operation: name,
+      model: GEMINI_LIVE_MODEL,
+      status: result.status === "error" ? "error" : "ok",
+      durationMs: Date.now() - startedAt,
+      errorMessage: result.status === "error" ? result.message : undefined,
+      detail: { toolStatus: result.status },
+    });
+
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Tool call failed.";

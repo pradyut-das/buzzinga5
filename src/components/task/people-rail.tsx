@@ -42,12 +42,20 @@ export function PeopleRail({
   clients: { id: string; name: string }[];
   clientId: string | null;
 }) {
+  // Naming anyone here overrides the client team, so the copy has to say which
+  // of the two rules is currently in force — see `getTaskRecipients`.
+  const hasOverride = assignees.length > 0 || collaborators.length > 0 || stakeholders.length > 0;
+
   return (
     <div className="sq-people">
       <div className="sq-people-head">
         <div className="sq-eyebrow">Ownership</div>
         <h3>Task team</h3>
-        <p className="sq-sub">Make it obvious who moves the work and who approves it.</p>
+        <p className="sq-sub">
+          {hasOverride
+            ? "Only these people are emailed about this task."
+            : "Empty means the whole client team is emailed. Name someone to narrow it to them."}
+        </p>
       </div>
       <PeopleField
         taskId={taskId}

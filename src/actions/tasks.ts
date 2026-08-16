@@ -6,7 +6,13 @@ import { eq, and, gt, gte, lt, lte, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { canAccessBoard, requireBoardAccess } from "@/lib/secure-board";
 import { TASK_PRIORITIES, type TaskPriority } from "@/db/schema";
-import { queueMoveNotification, queuePriorityNotification } from "@/lib/notifications";
+import {
+  queueCreatedNotification,
+  queueMoveNotification,
+  queuePriorityNotification,
+} from "@/lib/notifications";
+import { sendInstantNotifications } from "@/lib/send-instant-notification";
+import { currentContributorId } from "@/lib/auth/contributor";
 import { requireColumn, requireTask } from "@/lib/require-resource";
 import { indexTask, removeSource } from "@/lib/search/indexer";
 
@@ -47,6 +53,15 @@ export async function createTask(
     position: maxPosition + 1,
     ...(createdAt ? { createdAt } : null),
   });
+
+  // Same rule as the desk's own createTask: the client team hears about new
+  // work whichever screen made it.
+  const queued = await queueCreatedNotification({
+    boardId,
+    taskId: id,
+    createdById: await currentContributorId(boardId),
+  });
+  await sendInstantNotifications(boardId, queued);
 
   void indexTask(id);
   revalidatePath(`/boards/${boardId}`);
@@ -222,20 +237,18 @@ export async function updateTaskPriority(id: string, priority: TaskPriority, boa
   }
 
   const task = await requireTask(id, boardId);
+  const oldPriority = task.priority;
+
+  await db.update(tasks).set({ priority }).where(eq(tasks.id, id));
 
   // Only notify if priority actually changed
-  const oldPriority = task.priority;
   if (oldPriority !== priority) {
-    await db.update(tasks).set({ priority }).where(eq(tasks.id, id));
-
-    // Queue notification for priority change
     await queuePriorityNotification({
       boardId,
       taskId: id,
       priority,
+      changedById: await currentContributorId(boardId),
     });
-  } else {
-    await db.update(tasks).set({ priority }).where(eq(tasks.id, id));
   }
 
   revalidatePath(`/boards/${boardId}`);
@@ -328,6 +341,7 @@ export async function updateTaskColumn(
       taskId: id,
       fromColumnName: oldColumnName,
       toColumnName: newColumn.name,
+      movedById: await currentContributorId(boardId),
     });
   }
 

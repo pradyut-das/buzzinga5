@@ -1,37 +1,30 @@
 import { notFound } from "next/navigation";
-import { AdminConsole } from "@/components/sq/admin-console";
+import { AdminNav } from "@/components/sq/admin-nav";
+import { AdminOverviewPanel } from "@/components/sq/admin-overview";
+import { WorkspaceHeader } from "@/components/sq/workspace";
 import { getCurrentAdmin } from "@/lib/auth/admin";
-import {
-  listAdminBoards,
-  listAdminCategories,
-  listAdminClients,
-  listAdminUsers,
-} from "@/lib/admin/queries";
+import { getAdminOverview, listAdminIntegrations } from "@/lib/admin/queries";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Top-level CRUD over users, clients, boards and task categories. Non-admins get a 404 rather
- * than a redirect, so the console's existence is not advertised to them.
+ * The console's landing page: one screen that says whether anything is stuck.
+ * Non-admins get a 404 rather than a redirect, so the console's existence is
+ * not advertised to them — the same rule every page under /admin follows.
  */
 export default async function AdminPage() {
   const admin = await getCurrentAdmin();
   if (!admin) notFound();
 
-  const [users, clients, boards, categories] = await Promise.all([
-    listAdminUsers(),
-    listAdminClients(),
-    listAdminBoards(),
-    listAdminCategories(),
-  ]);
+  const [overview, integrations] = await Promise.all([getAdminOverview(), listAdminIntegrations()]);
 
   return (
-    <AdminConsole
-      currentUserId={admin.id}
-      users={users}
-      clients={clients}
-      boards={boards}
-      categories={categories}
-    />
+    <main className="sq-main">
+      <WorkspaceHeader crumb="Admin" />
+      <div className="sq-admin">
+        <AdminNav current="/admin" />
+        <AdminOverviewPanel overview={overview} integrations={integrations} />
+      </div>
+    </main>
   );
 }

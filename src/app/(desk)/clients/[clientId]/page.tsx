@@ -3,7 +3,9 @@ import Link from "next/link";
 import { CreateDocAction } from "@/components/reference/page-create-actions";
 import { ClientActions } from "@/components/sq/client-actions";
 import { ClientBoard } from "@/components/sq/client-board";
+import { ClientTeamPanel } from "@/components/sq/client-team-panel";
 import { DocsList } from "@/components/sq/docs-list";
+import { getClientTeam } from "@/actions/agency";
 import { getClientBoard, listDocs } from "@/lib/agency/queries";
 import { addBoardMember } from "@/lib/auth/membership";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -35,8 +37,18 @@ export default async function ClientBoardPage({
   const user = await getCurrentUser();
   if (user && data.board?.id) await addBoardMember(data.board.id, user.id);
 
-  const docs = await listDocs(clientId);
+  const [docs, team] = await Promise.all([listDocs(clientId), getClientTeam(clientId)]);
   const { client } = data;
+
+  // The team picker offers accounts, so it needs the same list the admin form
+  // does. Non-admins read the roster without it.
+  const teamAccounts = admin
+    ? accounts.map((account) => ({
+        id: account.id,
+        name: account.name,
+        email: account.email ?? "",
+      }))
+    : [];
 
   return (
     <div className="mx-auto max-w-[1500px]">
@@ -68,6 +80,13 @@ export default async function ClientBoardPage({
             />
           ) : null
         }
+      />
+
+      <ClientTeamPanel
+        clientId={clientId}
+        team={team}
+        accounts={teamAccounts}
+        editable={Boolean(admin)}
       />
 
       <section className="mt-12 border-t border-line pt-10">

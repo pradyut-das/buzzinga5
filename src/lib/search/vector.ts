@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { rawClient } from "@/db";
 import { geminiConfigured, requireGeminiKey } from "@/lib/agent/gemini";
+import { AiLimitError, meterAiCall } from "@/lib/ai/meter";
+import { currentUsageSubject, SYSTEM_SUBJECT } from "@/lib/ai/subject";
 
 /**
  * Semantic arm of block search.
@@ -27,18 +29,59 @@ function embeddingClient(): GoogleGenAI | null {
   return genai;
 }
 
-/** Embed one text string. Returns null when the API key is missing or fails. */
+/**
+ * Embed one text string. Returns null when the API key is missing or fails.
+ *
+ * Every embedding is metered like any other model call: indexing runs on every
+ * task and comment write, so it is the surface most likely to spend quietly.
+ * A refusal or failure degrades search to keyword-only rather than throwing —
+ * the ledger row is already written by the time we get here, so the spend
+ * decision stays visible even though the caller sees only a null.
+ */
 export async function embedText(text: string): Promise<number[] | null> {
   const client = embeddingClient();
   if (!client) return null;
+
+  // Indexing runs from server actions and from the backfill script, which has
+  // no session. Falling back to the system subject keeps the backfill under
+  // the global cap instead of exempting it.
+  const subject = await currentUsageSubject().catch(() => SYSTEM_SUBJECT);
+
   try {
-    const response = await client.models.embedContent({
-      model: EMBEDDING_MODEL,
-      contents: [text.slice(0, 20_000)],
-      config: { outputDimensionality: EMBEDDING_DIMS },
-    });
+    const response = await meterAiCall(
+      {
+        subject: subject.userId ? subject : SYSTEM_SUBJECT,
+        surface: "embedding",
+        operation: "embedContent",
+        model: EMBEDDING_MODEL,
+        estimated: true,
+        detail: { chars: Math.min(text.length, 20_000) },
+      },
+      () =>
+        client.models.embedContent({
+          model: EMBEDDING_MODEL,
+          contents: [text.slice(0, 20_000)],
+          config: { outputDimensionality: EMBEDDING_DIMS },
+        }),
+      // embedContent returns no token usage on the Gemini API path — the only
+      // count in the response is a Vertex-only *character* total. Tokens are
+      // therefore estimated from input length at the usual ~4 chars/token, and
+      // there is no output side to bill. The estimate is deliberately on the
+      // input we sent rather than nothing at all: embeddings run on every write,
+      // so treating them as free is the one way this ledger could quietly
+      // understate real spend.
+      () => ({
+        promptTokens: Math.ceil(Math.min(text.length, 20_000) / 4),
+        outputTokens: 0,
+        thoughtTokens: 0,
+        cachedTokens: 0,
+      }),
+    );
     return response.embeddings?.[0]?.values ?? null;
-  } catch {
+  } catch (error) {
+    if (error instanceof AiLimitError) {
+      console.warn("[search] embedding skipped, spend cap reached:", error.message);
+    }
     return null;
   }
 }

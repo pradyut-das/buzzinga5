@@ -67,6 +67,9 @@ export function useGeminiLive({ onMutation }: UseGeminiLiveOptions = {}) {
   const [outputLevel, setOutputLevel] = useState(0);
 
   const sessionRef = useRef<Session | null>(null);
+  /** Ledger id for the session's up-front charge, so it can be settled on hang-up. */
+  const usageSessionRef = useRef<string | null>(null);
+  const sessionStartedAtRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const captureContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -106,7 +109,31 @@ export function useGeminiLive({ onMutation }: UseGeminiLiveOptions = {}) {
     setOutputLevel(0);
   }, []);
 
+  /**
+   * Tells the server how long the session actually ran.
+   *
+   * `/api/agent/session` charges the token's full lifetime up front so an
+   * abandoned session still counts against the spend cap; this reports the
+   * real duration so the unused remainder is refunded. Fire-and-forget and
+   * best-effort — failing to settle costs an over-estimate in the ledger,
+   * which is the safe direction to be wrong in.
+   */
+  const settleUsage = useCallback(() => {
+    const sessionId = usageSessionRef.current;
+    const startedAt = sessionStartedAtRef.current;
+    usageSessionRef.current = null;
+    sessionStartedAtRef.current = null;
+    if (!sessionId || startedAt === null) return;
+    void fetch("/api/agent/voice-usage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, durationMs: Date.now() - startedAt }),
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
+
   const stop = useCallback(() => {
+    settleUsage();
     try {
       sessionRef.current?.close();
     } catch {
@@ -122,7 +149,7 @@ export function useGeminiLive({ onMutation }: UseGeminiLiveOptions = {}) {
     setState("idle");
     setDetail("");
     setActiveTool(null);
-  }, [teardownAudio]);
+  }, [teardownAudio, settleUsage]);
 
   useEffect(() => () => stop(), [stop]);
 
@@ -324,7 +351,12 @@ export function useGeminiLive({ onMutation }: UseGeminiLiveOptions = {}) {
     setDetail("Reading your boards");
     try {
       const response = await fetch("/api/agent/session", { method: "POST" });
-      const payload = (await response.json()) as { token?: string; model?: string; error?: string };
+      const payload = (await response.json()) as {
+        token?: string;
+        model?: string;
+        sessionId?: string;
+        error?: string;
+      };
       if (!response.ok || !payload.token || !payload.model) {
         throw new Error(payload.error || "Could not start a voice session.");
       }
@@ -353,6 +385,10 @@ export function useGeminiLive({ onMutation }: UseGeminiLiveOptions = {}) {
             setDetail(event?.message || "The voice connection dropped.");
           },
           onclose: () => {
+            // Gemini can close the session on its own (token expiry, network
+            // drop), which never reaches `stop`. Settle here too so those
+            // sessions are not left charged for their full lifetime.
+            settleUsage();
             sessionRef.current = null;
             teardownAudio();
             setState("idle");
@@ -361,6 +397,8 @@ export function useGeminiLive({ onMutation }: UseGeminiLiveOptions = {}) {
         config: {},
       });
       sessionRef.current = session;
+      usageSessionRef.current = payload.sessionId ?? null;
+      sessionStartedAtRef.current = Date.now();
 
       const context = new AudioContext({ sampleRate: INPUT_RATE });
       captureContextRef.current = context;
@@ -403,7 +441,7 @@ export function useGeminiLive({ onMutation }: UseGeminiLiveOptions = {}) {
       teardownAudio();
       sessionRef.current = null;
     }
-  }, [handleMessage, stop, teardownAudio]);
+  }, [handleMessage, stop, teardownAudio, settleUsage]);
 
   /** Sends a typed line into the open voice session, keeping one thread of context. */
   const sendText = useCallback((text: string) => {

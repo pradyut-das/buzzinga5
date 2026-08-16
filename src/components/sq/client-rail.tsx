@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { SquirlMark } from "@/components/icons/squirl-mark";
 import { openSearchPalette } from "@/components/search/search-palette";
 
 const NAV: Array<{ href: string; label: string; Icon: LucideIcon }> = [
@@ -29,13 +30,17 @@ const NAV: Array<{ href: string; label: string; Icon: LucideIcon }> = [
 ];
 
 function Brand() {
+  // Bumping the counter restarts the blink, so the mark winks back on hover.
+  const [wink, setWink] = useState(0);
+
   return (
-    <Link href="/" className="flex items-center gap-3 px-3 py-2" aria-label="Squirrl home">
-      <span className="relative h-8 w-8" aria-hidden>
-        <span className="absolute left-1 top-2 h-5 w-2 rotate-[28deg] rounded-full bg-[#2b6ff5]" />
-        <span className="absolute right-1 top-1 h-6 w-2 -rotate-[28deg] rounded-full bg-[#42c5e9]" />
-        <span className="absolute bottom-1 left-[11px] h-2 w-3 rounded-full bg-[#5b7cf7]" />
-      </span>
+    <Link
+      href="/"
+      className="flex items-center gap-3 px-3 py-2"
+      aria-label="Squirrl home"
+      onMouseEnter={() => setWink((n) => n + 1)}
+    >
+      <SquirlMark className="h-8 w-8" trigger={wink} />
       <span className="text-[22px] font-semibold tracking-[-0.03em] text-ink">Squirrl</span>
     </Link>
   );

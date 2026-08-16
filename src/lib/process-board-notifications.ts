@@ -1,92 +1,135 @@
 import { db } from "@/db";
-import { pendingNotifications, sentEmails } from "@/db/schema";
-import { eq, inArray, and } from "drizzle-orm";
+import { contributors, pendingNotifications, sentEmails } from "@/db/schema";
+import { eq, inArray, and, type SQL } from "drizzle-orm";
 import { render } from "@react-email/render";
 import { TaskDigestEmail, type NotificationItem } from "@/emails/task-digest";
 import { Resend } from "resend";
 import { env } from "@/lib/validate-env";
+import { partitionByEmailQuota, recordEmailsSent } from "@/lib/email-rate-limit";
 
 // Initialize Resend client if API key is present
 const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
 
 // Production domain for email links
-const PRODUCTION_DOMAIN = "https://itacorubi.com";
+const PRODUCTION_DOMAIN = "https://squirrl.itsdesignare.com";
 
 /**
  * Determine base URL for email links.
  * Uses the production domain for Vercel production, VERCEL_URL for preview deployments,
  * and localhost for local development.
  */
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
   if (env.VERCEL_ENV === "production") return PRODUCTION_DOMAIN;
   if (env.VERCEL_URL) return `https://${env.VERCEL_URL}`;
   return "http://localhost:5800";
 }
 
-// Hardcoded "from" email address for notifications
-const FROM_EMAIL = "noreply@notifications.itacorubi.com";
+// Hardcoded "from" email address for notifications. The domain must be
+// verified in Resend or every send is rejected.
+const FROM_EMAIL = "noreply@squirrl.itsdesignare.com";
 
 export interface ProcessBoardNotificationsResult {
   processed: number;
   sentToResend: number;
   failed: number;
   skippedNoEmail: number;
+  /** Recipients held back by their hourly or daily cap; their rows stay queued. */
+  rateLimited: number;
   errors: Array<{ recipientId: string; error: string }>;
 }
 
+/** The relations an email needs off a queued row. */
+const NOTIFICATION_RELATIONS = {
+  recipient: true,
+  triggeredBy: true,
+  task: true,
+  board: true,
+} as const;
+
+function loadNotifications(where: SQL | undefined) {
+  return db.query.pendingNotifications.findMany({ where, with: NOTIFICATION_RELATIONS });
+}
+
+/** A pending row with the relations the email needs. */
+type LoadedNotification = Awaited<ReturnType<typeof loadNotifications>>[number];
+
 /**
- * Process pending notifications for a single board.
+ * Mints an unsubscribe token for anyone about to be emailed who lacks one.
  *
- * This function:
- * 1. Fetches pending notifications for the given board
- * 2. Groups them by recipient
- * 3. Renders and saves email digests to sent_emails table
- * 4. Sends via Resend if API key is configured
- * 5. Cleans up processed notifications
- *
- * Configuration (baseUrl, fromEmail, Resend client) is determined automatically from env.
- *
- * @param boardId - The board ID to process notifications for
- * @returns Detailed results of the processing
+ * Done at send time rather than in the migration so the column fills in as
+ * people are actually written to, and rows created since keep working without
+ * a second backfill.
  */
-export async function processBoardNotifications(
-  boardId: string,
-): Promise<ProcessBoardNotificationsResult> {
-  const baseUrl = getBaseUrl();
+async function ensureUnsubscribeTokens(
+  recipients: Array<{ id: string; unsubscribeToken: string | null }>,
+): Promise<Map<string, string>> {
+  const tokens = new Map<string, string>();
 
-  // Fetch pending notifications for this board
-  const notifications = await db.query.pendingNotifications.findMany({
-    where: eq(pendingNotifications.boardId, boardId),
-    with: {
-      recipient: true,
-      triggeredBy: true,
-      task: true,
-      board: true,
-    },
-  });
-
-  if (notifications.length === 0) {
-    return { processed: 0, sentToResend: 0, failed: 0, skippedNoEmail: 0, errors: [] };
+  for (const recipient of recipients) {
+    if (recipient.unsubscribeToken) {
+      tokens.set(recipient.id, recipient.unsubscribeToken);
+      continue;
+    }
+    const token = crypto.randomUUID();
+    await db
+      .update(contributors)
+      .set({ unsubscribeToken: token })
+      .where(eq(contributors.id, recipient.id));
+    tokens.set(recipient.id, token);
   }
+
+  return tokens;
+}
+
+/**
+ * Renders, records and sends one email per recipient, then clears the rows it
+ * delivered.
+ *
+ * The single delivery path for both the batched cron sweep and the instant
+ * sends, so `sent_emails` logging, the unsubscribe skip and error isolation
+ * cannot drift apart between them.
+ *
+ * Rows are deleted only once their email is away. A failure therefore leaves
+ * them queued, and the next cron sweep retries them — that is the retry
+ * mechanism, not an oversight.
+ */
+export async function deliverNotifications(
+  notifications: LoadedNotification[],
+  options: { subject?: (items: LoadedNotification[]) => string } = {},
+): Promise<ProcessBoardNotificationsResult> {
+  if (notifications.length === 0) {
+    return {
+      processed: 0,
+      sentToResend: 0,
+      failed: 0,
+      skippedNoEmail: 0,
+      rateLimited: 0,
+      errors: [],
+    };
+  }
+
+  const baseUrl = getBaseUrl();
 
   // Group notifications by recipient
   const notificationsByRecipient = new Map<
     string,
     {
-      recipient: (typeof notifications)[0]["recipient"];
-      board: (typeof notifications)[0]["board"];
-      items: typeof notifications;
+      recipient: LoadedNotification["recipient"];
+      board: LoadedNotification["board"];
+      items: LoadedNotification[];
     }
   >();
 
+  // Someone with no email on file, or who has opted out, is not written to.
+  const undeliverable = notifications.filter(
+    (n) => !n.recipient.email || n.recipient.unsubscribedAt,
+  );
+  const undeliverableIds = new Set(undeliverable.map((n) => n.id));
+
   for (const notification of notifications) {
+    if (undeliverableIds.has(notification.id)) continue;
+
     const recipientId = notification.recipientId;
-
-    // Skip if recipient has no email
-    if (!notification.recipient.email) {
-      continue;
-    }
-
     if (!notificationsByRecipient.has(recipientId)) {
       notificationsByRecipient.set(recipientId, {
         recipient: notification.recipient,
@@ -98,8 +141,21 @@ export async function processBoardNotifications(
     notificationsByRecipient.get(recipientId)!.items.push(notification);
   }
 
+  // Hold back anyone already at their hourly or daily cap. Their rows are left
+  // queued rather than dropped, so the events fold into the next digest they
+  // are eligible for instead of vanishing.
+  const { limited } = await partitionByEmailQuota(Array.from(notificationsByRecipient.keys()));
+  for (const recipientId of limited) {
+    notificationsByRecipient.delete(recipientId);
+  }
+
+  const unsubscribeTokens = await ensureUnsubscribeTokens(
+    Array.from(notificationsByRecipient.values()).map((d) => d.recipient),
+  );
+
   // Track results
   const processedNotificationIds: string[] = [];
+  const delivered: string[] = [];
   const errors: Array<{ recipientId: string; error: string }> = [];
   let processed = 0;
   let sentToResend = 0;
@@ -132,7 +188,8 @@ export async function processBoardNotifications(
     });
 
     const boardUrl = `${baseUrl}/boards/${board.id}`;
-    const subject = `Task updates on ${board.title}`;
+    const subject = options.subject?.(items) ?? `Task updates on ${board.title}`;
+    const unsubscribeUrl = `${baseUrl}/api/unsubscribe?token=${unsubscribeTokens.get(recipientId)}`;
 
     try {
       // Render email to HTML
@@ -141,6 +198,7 @@ export async function processBoardNotifications(
           recipientName: recipient.name,
           boardTitle: board.title,
           boardUrl,
+          unsubscribeUrl,
           notifications: emailNotifications,
         }),
       );
@@ -165,15 +223,22 @@ export async function processBoardNotifications(
       // Send via Resend if client is available
       if (resend) {
         await resend.emails.send({
-          from: `Kanban Board <${FROM_EMAIL}>`,
+          from: `Squirrl <${FROM_EMAIL}>`,
           to: recipient.email!,
           subject,
           html: htmlContent,
+          // Lets Gmail and Outlook offer their own unsubscribe control, which
+          // mailbox providers weigh when deciding whether we look like spam.
+          headers: {
+            "List-Unsubscribe": `<${unsubscribeUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
         });
         sentToResend++;
       }
 
       processed++;
+      delivered.push(recipientId);
       processedNotificationIds.push(...items.map((n) => n.id));
     } catch (error) {
       console.error(`Failed to process email for ${recipient.email}:`, error);
@@ -189,29 +254,64 @@ export async function processBoardNotifications(
   if (processedNotificationIds.length > 0) {
     await db
       .delete(pendingNotifications)
-      .where(
-        and(
-          eq(pendingNotifications.boardId, boardId),
-          inArray(pendingNotifications.id, processedNotificationIds),
-        ),
-      );
+      .where(inArray(pendingNotifications.id, processedNotificationIds));
   }
 
-  // Delete notifications for recipients without email (no point keeping them)
-  const notificationsWithoutEmail = notifications.filter((n) => !n.recipient.email);
-  const skippedNoEmail = notificationsWithoutEmail.length;
-
-  if (skippedNoEmail > 0) {
-    await db.delete(pendingNotifications).where(
-      and(
-        eq(pendingNotifications.boardId, boardId),
-        inArray(
-          pendingNotifications.id,
-          notificationsWithoutEmail.map((n) => n.id),
-        ),
-      ),
-    );
+  // Drop rows addressed to someone we cannot or must not write to. Keeping them
+  // would requeue the same dead delivery on every sweep.
+  if (undeliverableIds.size > 0) {
+    await db
+      .delete(pendingNotifications)
+      .where(inArray(pendingNotifications.id, Array.from(undeliverableIds)));
   }
 
-  return { processed, sentToResend, failed, skippedNoEmail, errors };
+  // Counted after the fact, against what actually went out — a cap on attempts
+  // would let failures eat into someone's quota.
+  await recordEmailsSent(delivered);
+
+  return {
+    processed,
+    sentToResend,
+    failed,
+    skippedNoEmail: undeliverableIds.size,
+    rateLimited: limited.size,
+    errors,
+  };
+}
+
+/**
+ * Process pending notifications for a single board.
+ *
+ * Drains the board's queue into one digest per recipient. Called by the cron
+ * sweep and by the board's own "send now" endpoint.
+ *
+ * @param boardId - The board ID to process notifications for
+ * @returns Detailed results of the processing
+ */
+export async function processBoardNotifications(
+  boardId: string,
+): Promise<ProcessBoardNotificationsResult> {
+  const notifications = await loadNotifications(eq(pendingNotifications.boardId, boardId));
+
+  return deliverNotifications(notifications);
+}
+
+/**
+ * Loads a specific set of queued rows for immediate delivery.
+ *
+ * Scoped by board as well as id so a caller cannot reach outside the board it
+ * is acting on.
+ */
+export async function loadNotificationsForInstantSend(
+  boardId: string,
+  notificationIds: string[],
+): Promise<LoadedNotification[]> {
+  if (notificationIds.length === 0) return [];
+
+  return loadNotifications(
+    and(
+      eq(pendingNotifications.boardId, boardId),
+      inArray(pendingNotifications.id, notificationIds),
+    ),
+  );
 }

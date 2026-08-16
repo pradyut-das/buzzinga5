@@ -1,6 +1,8 @@
 import { FunctionCallingConfigMode, GoogleGenAI, type Content, type Part } from "@google/genai";
 import { NextResponse } from "next/server";
 import { GEMINI_CHAT_MODEL, requireGeminiKey } from "@/lib/agent/gemini";
+import { AiLimitError, countsFromResponse, meterAiCall } from "@/lib/ai/meter";
+import { subjectFromScope } from "@/lib/ai/subject";
 import { buildSystemInstruction } from "@/lib/agent/prompt";
 import { getAgentDirectory, getAgentScope } from "@/lib/agent/scope";
 import { getDashboardStats } from "@/lib/agent/stats";
@@ -163,6 +165,7 @@ export async function POST(request: Request) {
     ]);
 
     const ai = new GoogleGenAI({ apiKey: requireGeminiKey() });
+    const subject = subjectFromScope(scope);
     const history: Content[] = (body.history ?? [])
       .slice(-MAX_HISTORY)
       .filter((turn) => turn.text?.trim())
@@ -173,32 +176,48 @@ export async function POST(request: Request) {
     const deskMode = body.responseMode === "desk";
 
     for (let step = 0; step < MAX_STEPS; step += 1) {
-      const response = await ai.models.generateContent({
-        model: GEMINI_CHAT_MODEL,
-        contents,
-        config: {
-          systemInstruction:
-            buildSystemInstruction(directory, stats, "chat") +
-            (deskMode ? DESK_UI_INSTRUCTION : ""),
-          tools: [
-            {
-              functionDeclarations: deskMode ? [...ALL_TOOLS, RENDER_DESK_UI_TOOL] : ALL_TOOLS,
-            },
-          ],
-          ...(deskMode
-            ? {
-                toolConfig: {
-                  functionCallingConfig: {
-                    mode: FunctionCallingConfigMode.ANY,
-                    // One read round keeps the generated surface both current
-                    // and fast; after that, the model must render the answer.
-                    ...(trace.length ? { allowedFunctionNames: [RENDER_DESK_UI_TOOL.name] } : {}),
-                  },
-                },
-              }
-            : {}),
+      // Metered per step, not per request: a six-step tool loop is six model
+      // calls, and a loop that runs away has to hit the cap on the step that
+      // takes it over, not after the whole request has already been paid for.
+      const response = await meterAiCall(
+        {
+          subject,
+          surface: "chat",
+          operation: "generateContent",
+          model: GEMINI_CHAT_MODEL,
+          detail: { step, deskMode },
         },
-      });
+        () =>
+          ai.models.generateContent({
+            model: GEMINI_CHAT_MODEL,
+            contents,
+            config: {
+              systemInstruction:
+                buildSystemInstruction(directory, stats, "chat") +
+                (deskMode ? DESK_UI_INSTRUCTION : ""),
+              tools: [
+                {
+                  functionDeclarations: deskMode ? [...ALL_TOOLS, RENDER_DESK_UI_TOOL] : ALL_TOOLS,
+                },
+              ],
+              ...(deskMode
+                ? {
+                    toolConfig: {
+                      functionCallingConfig: {
+                        mode: FunctionCallingConfigMode.ANY,
+                        // One read round keeps the generated surface both current
+                        // and fast; after that, the model must render the answer.
+                        ...(trace.length
+                          ? { allowedFunctionNames: [RENDER_DESK_UI_TOOL.name] }
+                          : {}),
+                      },
+                    },
+                  }
+                : {}),
+            },
+          }),
+        countsFromResponse,
+      );
 
       const calls = response.functionCalls ?? [];
       const renderCall = deskMode
@@ -262,6 +281,11 @@ export async function POST(request: Request) {
       trace,
     });
   } catch (error) {
+    // A refused call is a budget decision, not a failure: say so plainly and
+    // return 429 so the client can tell it apart from a broken agent.
+    if (error instanceof AiLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 429 });
+    }
     const message = error instanceof Error ? error.message : "The chat agent failed.";
     console.error("[agent] chat failed:", message);
     const unauthorized = /not signed in/i.test(message);

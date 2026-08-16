@@ -56,12 +56,32 @@ const serverEnvSchema = z.object({
     })
     .optional(),
 
+  // How much notification email one person can be sent before the rest is held
+  // back for a later digest. Optional: each falls back to a default cap in
+  // src/lib/email-rate-limit.ts, so unset means "use the default", never "no cap".
+  EMAIL_MAX_PER_HOUR: z.string().optional(),
+  EMAIL_MAX_PER_DAY: z.string().optional(),
+
   // Gemini (creator homepage agent) - optional; without it the dashboard still
   // renders and only the voice agent and chatbot are turned off.
   GEMINI_API_KEY: z.string().min(1, "GEMINI_API_KEY cannot be empty").optional(),
   GEMINI_LIVE_MODEL: z.string().optional(),
   GEMINI_CHAT_MODEL: z.string().optional(),
   GEMINI_LIVE_VOICE: z.string().optional(),
+
+  // AI spend caps (see ADR global__ai-usage-metering). All optional: each
+  // falls back to a safe default in src/lib/ai/limits.ts, so an unset value
+  // means "use the default cap", never "no cap". Costs are plain USD.
+  AI_USER_CALLS_PER_MINUTE: z.string().optional(),
+  AI_USER_CALLS_PER_DAY: z.string().optional(),
+  AI_USER_TOKENS_PER_DAY: z.string().optional(),
+  AI_USER_USD_PER_DAY: z.string().optional(),
+  AI_GLOBAL_CALLS_PER_DAY: z.string().optional(),
+  AI_GLOBAL_USD_PER_DAY: z.string().optional(),
+  // Estimated Live-session cost per minute of audio, in USD. Live bills in the
+  // browser where no token count reaches the server, so voice spend is metered
+  // from session duration and flagged as an estimate in the ledger.
+  AI_VOICE_USD_PER_MINUTE: z.string().optional(),
 
   // Optional third-party research providers. A missing endpoint leaves the
   // related sync disabled instead of blocking the rest of the desk.

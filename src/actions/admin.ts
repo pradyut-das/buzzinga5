@@ -2,10 +2,26 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { boardMembers, boards, clients, columns, taskCategories, tasks, users } from "@/db/schema";
+import {
+  CONTRIBUTOR_COLORS,
+  boardMembers,
+  boards,
+  clients,
+  columns,
+  contributors,
+  pendingNotifications,
+  tags,
+  taskAssignees,
+  taskCategories,
+  taskCollaborators,
+  taskStakeholders,
+  taskTags,
+  tasks,
+  users,
+} from "@/db/schema";
 import { addBoardMember } from "@/lib/auth/membership";
 import { requireAdmin } from "@/lib/auth/admin";
 import { deleteBoardCascade, deleteClientCascade, deleteUserCascade } from "@/lib/admin/cascade";
@@ -421,6 +437,181 @@ export async function adminDeleteCategory(categoryId: string): Promise<AdminResu
     await requireAdmin();
     await db.update(tasks).set({ categoryId: null }).where(eq(tasks.categoryId, categoryId));
     await db.delete(taskCategories).where(eq(taskCategories.id, categoryId));
+    return ok();
+  });
+}
+
+// ── Contributors ───────────────────────────────────────────────────────────
+
+const contributorSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(80, "Name is too long"),
+  email: z
+    .string()
+    .trim()
+    .max(160)
+    .optional()
+    .transform((value) => value?.toLowerCase() || ""),
+  color: z.enum(CONTRIBUTOR_COLORS),
+});
+
+export async function adminUpdateContributor(
+  contributorId: string,
+  input: { name: string; email?: string; color: string },
+): Promise<AdminResult> {
+  return guard(async () => {
+    await requireAdmin();
+    const parsed = contributorSchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0].message);
+
+    // An address is optional, but a malformed one silently drops that
+    // person's mail, so it is checked whenever there is something to check.
+    if (parsed.data.email && !z.email().safeParse(parsed.data.email).success) {
+      return fail("Enter a valid email");
+    }
+
+    await db
+      .update(contributors)
+      .set({
+        name: parsed.data.name,
+        email: parsed.data.email || null,
+        color: parsed.data.color,
+      })
+      .where(eq(contributors.id, contributorId));
+
+    return ok();
+  });
+}
+
+/**
+ * Re-subscribe someone, or opt them out on their behalf. Clearing the
+ * timestamp is all a re-subscribe takes — the token stays valid so their old
+ * unsubscribe link keeps working.
+ */
+export async function adminSetContributorSubscribed(
+  contributorId: string,
+  subscribed: boolean,
+): Promise<AdminResult> {
+  return guard(async () => {
+    await requireAdmin();
+    await db
+      .update(contributors)
+      .set({ unsubscribedAt: subscribed ? null : new Date() })
+      .where(eq(contributors.id, contributorId));
+    return ok();
+  });
+}
+
+/** Refuses while the person still holds work, rather than orphaning it. */
+export async function adminDeleteContributor(contributorId: string): Promise<AdminResult> {
+  return guard(async () => {
+    await requireAdmin();
+
+    const assigned = await db.query.taskAssignees.findFirst({
+      where: eq(taskAssignees.contributorId, contributorId),
+      columns: { taskId: true },
+    });
+    if (assigned) {
+      return fail("Unassign this person from their tasks before removing them");
+    }
+
+    await db.delete(taskCollaborators).where(eq(taskCollaborators.contributorId, contributorId));
+    await db.delete(taskStakeholders).where(eq(taskStakeholders.contributorId, contributorId));
+    await db
+      .delete(pendingNotifications)
+      .where(eq(pendingNotifications.recipientId, contributorId));
+    await db
+      .update(pendingNotifications)
+      .set({ triggeredById: null })
+      .where(eq(pendingNotifications.triggeredById, contributorId));
+    await db.delete(contributors).where(eq(contributors.id, contributorId));
+
+    return ok();
+  });
+}
+
+// ── Tags ───────────────────────────────────────────────────────────────────
+
+const tagSchema = z.object({
+  boardId: z.string().trim().min(1, "Pick a board"),
+  name: z.string().trim().min(1, "Name is required").max(40, "Name is too long"),
+  color: z.enum(CONTRIBUTOR_COLORS),
+});
+
+export async function adminCreateTag(input: {
+  boardId: string;
+  name: string;
+  color: string;
+}): Promise<AdminResult> {
+  return guard(async () => {
+    await requireAdmin();
+    const parsed = tagSchema.safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0].message);
+
+    const clash = await db.query.tags.findFirst({
+      where: and(eq(tags.boardId, parsed.data.boardId), eq(tags.name, parsed.data.name)),
+      columns: { id: true },
+    });
+    if (clash) return fail("That board already has a tag with this name");
+
+    await db.insert(tags).values({
+      id: randomUUID(),
+      boardId: parsed.data.boardId,
+      name: parsed.data.name,
+      color: parsed.data.color,
+    });
+
+    return ok();
+  });
+}
+
+export async function adminUpdateTag(
+  tagId: string,
+  input: { name: string; color: string },
+): Promise<AdminResult> {
+  return guard(async () => {
+    await requireAdmin();
+    const parsed = tagSchema.omit({ boardId: true }).safeParse(input);
+    if (!parsed.success) return fail(parsed.error.issues[0].message);
+
+    await db
+      .update(tags)
+      .set({ name: parsed.data.name, color: parsed.data.color })
+      .where(eq(tags.id, tagId));
+
+    return ok();
+  });
+}
+
+/** Tasks carrying the tag survive; they simply lose the label. */
+export async function adminDeleteTag(tagId: string): Promise<AdminResult> {
+  return guard(async () => {
+    await requireAdmin();
+    await db.delete(taskTags).where(eq(taskTags.tagId, tagId));
+    await db.delete(tags).where(eq(tags.id, tagId));
+    return ok();
+  });
+}
+
+// ── Notification queue ─────────────────────────────────────────────────────
+
+/**
+ * Drops queued notifications without sending them. The escape hatch for a
+ * backlog built by a bad import — the alternative is mailing everyone about
+ * work they already know about.
+ */
+export async function adminDiscardPendingNotifications(ids: string[]): Promise<AdminResult> {
+  return guard(async () => {
+    await requireAdmin();
+    if (ids.length === 0) return fail("Nothing selected");
+    await db.delete(pendingNotifications).where(inArray(pendingNotifications.id, ids));
+    return ok();
+  });
+}
+
+export async function adminDiscardAllPendingNotifications(): Promise<AdminResult> {
+  return guard(async () => {
+    await requireAdmin();
+    await db.delete(pendingNotifications);
     return ok();
   });
 }

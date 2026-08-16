@@ -25,10 +25,13 @@ import { hashPassword } from "@/lib/password-hash";
 import { addBoardMember } from "@/lib/auth/membership";
 import {
   queueAssignNotification,
+  queueCreatedNotification,
   queueCommentNotification,
   queueMoveNotification,
   queuePriorityNotification,
 } from "@/lib/notifications";
+import { contributorIdForUser } from "@/lib/auth/contributor";
+import { sendInstantNotifications } from "@/lib/send-instant-notification";
 import {
   AgentError,
   didYouMean,
@@ -335,14 +338,26 @@ export function createTask(
         createdAt: new Date(),
       });
 
+      // Announced before any assignee is attached: naming someone makes the
+      // task's own people the recipient list, and creation is meant to reach
+      // the whole client team.
+      const created = await queueCreatedNotification({
+        boardId: board.id,
+        taskId: id,
+        createdById: await contributorIdForUser(board.id, scope.userId),
+      });
+      await sendInstantNotifications(board.id, created);
+
       if (input.assigneeName) {
         const contributor = await resolveContributor(board.id, input.assigneeName);
         await db.insert(taskAssignees).values({ taskId: id, contributorId: contributor.id });
-        await queueAssignNotification({
+        const queued = await queueAssignNotification({
           boardId: board.id,
           taskId: id,
           assigneeId: contributor.id,
+          assignedById: await contributorIdForUser(board.id, scope.userId),
         });
+        await sendInstantNotifications(board.id, queued);
       }
       if (input.tagName) {
         const tag = await resolveTag(board.id, input.tagName);
@@ -418,6 +433,7 @@ export async function moveTask(
           taskId: task.id,
           fromColumnName: from.name,
           toColumnName: target.name,
+          movedById: await contributorIdForUser(task.boardId, scope.userId),
         });
       }
       refresh(task.boardId);
@@ -439,6 +455,7 @@ export async function setTaskPriority(
         boardId: task.boardId,
         taskId: task.id,
         priority: input.priority,
+        changedById: await contributorIdForUser(task.boardId, scope.userId),
       });
       refresh(task.boardId);
       return `"${task.title}" is now ${input.priority} priority.`;
@@ -591,11 +608,13 @@ export async function assignTask(
       if (existing.length) return `${contributor.name} is already on "${task.title}".`;
 
       await db.insert(taskAssignees).values({ taskId: task.id, contributorId: contributor.id });
-      await queueAssignNotification({
+      const queued = await queueAssignNotification({
         boardId: task.boardId,
         taskId: task.id,
         assigneeId: contributor.id,
+        assignedById: await contributorIdForUser(task.boardId, scope.userId),
       });
+      await sendInstantNotifications(task.boardId, queued);
       refresh(task.boardId);
       return `Assigned "${task.title}" to ${contributor.name}.`;
     },

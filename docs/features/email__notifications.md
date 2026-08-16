@@ -21,24 +21,47 @@ Contributors can optionally add their email address to receive notifications:
 
 Notifications are queued when these events occur:
 
-| Event            | Recipients                               | Details                  |
-| ---------------- | ---------------------------------------- | ------------------------ |
-| New comment      | Assignees + Stakeholders (except author) | Includes comment preview |
-| @Mention         | Mentioned contributor (except author)    | Includes comment preview |
-| Task moved       | Assignees + Stakeholders                 | From/to column names     |
-| Assignee added   | The new assignee only                    | —                        |
-| Priority changed | Assignees + Stakeholders                 | New priority level       |
+"The task's people" below means its **assignees, collaborators and stakeholders** — all three roles, deduplicated, minus whoever performed the action. See `getTaskRecipients` in `src/lib/notifications.ts`.
 
-**Note:** @Mentioned contributors receive notifications regardless of whether they are assignees or stakeholders. This allows notifying anyone on the board, even if they're not directly involved with the task.
+| Event            | Recipients                        | Details                  | Delivery |
+| ---------------- | --------------------------------- | ------------------------ | -------- |
+| New comment      | The task's people (except author) | Includes comment preview | Digest   |
+| @Mention         | Mentioned contributor             | Includes comment preview | Instant  |
+| Task moved       | The task's people                 | From/to column names     | Digest   |
+| Person added     | The people just added             | Assignee or stakeholder  | Instant  |
+| Priority changed | The task's people                 | New priority level       | Digest   |
+| Status changed   | The task's people                 | New status               | Digest   |
+| Doc attached     | The task's people                 | Doc title                | Digest   |
+
+**Note:** @Mentioned contributors receive notifications regardless of their role on the task. This allows notifying anyone on the board, even if they're not directly involved with it.
+
+**Attribution:** each row records the acting person as a contributor of that board (`currentContributorId` in `src/lib/auth/contributor.ts`). Where the actor cannot be resolved — signed out, or never staffed on the board — the email falls back to "Someone".
 
 ### Batching
 
-Notifications are **batched** to avoid email spam:
+Most notifications are **batched** to avoid email spam:
 
-- A cron job runs every 5 minutes
+- A cron job runs every 30 minutes
 - All pending notifications for a recipient are grouped
 - A single **digest email** is sent per recipient
 - Notifications are grouped by task within the email
+
+Being assigned work and being @mentioned are sent **immediately** instead, since both are things people are waiting on. Everything else waits for the sweep, so a task edited five times still costs one email.
+
+### Rate limits
+
+Instant delivery removes the batching that used to cap volume on its own, so each recipient has a hard ceiling:
+
+| Limit    | Default | Env                  |
+| -------- | ------- | -------------------- |
+| Per hour | 6       | `EMAIL_MAX_PER_HOUR` |
+| Per day  | 30      | `EMAIL_MAX_PER_DAY`  |
+
+Counted per contributor in `email_send_counters`, against emails actually sent — a failed send does not consume quota. Past the cap, **queued rows are left in place rather than dropped**, so the events fold into the next digest the recipient is eligible for instead of being lost. An unset env var means "use the default", never "no cap". The check fails open: if the counters cannot be read, the mail goes out.
+
+### Unsubscribing
+
+Every email carries an unsubscribe link, plus `List-Unsubscribe` headers so Gmail and Outlook show their own control. The link is `/api/unsubscribe?token=…`, unauthenticated by design — it is followed from an inbox where there is no session, and the per-person token is the credential. Opting out sets `contributors.unsubscribedAt`; clearing that column re-subscribes. Rows addressed to an unsubscribed person are dropped rather than held.
 
 ### Digest Email Content
 
@@ -48,7 +71,7 @@ Each digest email includes:
 - List of tasks with updates
 - For each task: clickable title + list of changes
 - Direct links to view tasks on the board
-- Footer explaining how to unsubscribe (remove email)
+- Footer with a one-click unsubscribe link
 
 ## User Flows
 
@@ -62,7 +85,7 @@ Each digest email includes:
 
 ### Disable Notifications
 
-Remove your email address from the contributor profile:
+Either follow the unsubscribe link in any notification email, or remove your email address from the contributor profile:
 
 1. Open board → Click "Contributors" in header
 2. Find your contributor entry
@@ -88,17 +111,19 @@ All board members can view the history of notification emails sent for their boa
 
 ### Environment Variables
 
-| Variable         | Required         | Description                                             |
-| ---------------- | ---------------- | ------------------------------------------------------- |
-| `RESEND_API_KEY` | No               | Resend API key — if present, emails are sent via Resend |
-| `CRON_SECRET`    | Yes (production) | Secret to authorize cron endpoint                       |
+| Variable             | Required         | Description                                             |
+| -------------------- | ---------------- | ------------------------------------------------------- |
+| `RESEND_API_KEY`     | No               | Resend API key — if present, emails are sent via Resend |
+| `CRON_SECRET`        | Yes (production) | Secret to authorize cron endpoint                       |
+| `EMAIL_MAX_PER_HOUR` | No               | Emails per recipient per hour (default 6)               |
+| `EMAIL_MAX_PER_DAY`  | No               | Emails per recipient per day (default 30)               |
 
 ### Notification Queue
 
 Notifications are stored in `pending_notifications` table:
 
 - Queued immediately when events occur
-- Processed by cron job every 5 minutes
+- Processed by cron job every 30 minutes
 - Deleted after successful delivery
 - Notifications for recipients without email are automatically cleaned up
 
@@ -107,8 +132,16 @@ Notifications are stored in `pending_notifications` table:
 The notification digest is processed by:
 
 - Endpoint: `/api/cron/send-notifications`
-- Schedule: Every 5 minutes (`*/5 * * * *`)
+- Schedule: Every 30 minutes (`*/30 * * * *`)
 - Configured in `vercel.json`
+
+## Verifying
+
+`pnpm verify:notifications` drives the whole pipeline against the dev database — recipients, actor attribution, delivery, the unsubscribe skip, the rate-limit hold-back and the instant-send subject — and removes everything it creates, including on failure.
+
+It exists because the Playwright coverage cannot reach this code. `playwright/email-notifications.spec.ts` navigates to `/boards/<id>`, a **page route that no longer exists** since the desk moved to `/clients/...`; every seeded test in it 404s before touching any email logic. The same rot affects eight other board-UI specs. Only the API-level tests in that file still run: the three auth checks and the four unsubscribe-route checks.
+
+Repointing those specs at the desk UI is worth doing, but it is a separate piece of work from the notification pipeline itself.
 
 ## Email History
 

@@ -21,6 +21,9 @@ import {
   type TaskStatus,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/session";
+import { currentContributorId, resolveContributorForUser } from "@/lib/auth/contributor";
+import { queueAssignNotification, queueStatusNotification } from "@/lib/notifications";
+import { sendInstantNotifications } from "@/lib/send-instant-notification";
 import { isTaskStatus } from "@/lib/task-types";
 import { indexAsset, indexTask } from "@/lib/search/indexer";
 
@@ -59,10 +62,23 @@ async function revalidateTask(taskId: string) {
 export async function setTaskStatus(taskId: string, status: string) {
   await requireUser();
   if (!isTaskStatus(status)) throw new Error(`Unknown status: ${status}`);
+  const task = await loadTask(taskId);
+
+  // Re-picking the status a task already has is not news.
+  if (task.status === status) return;
+
   await db
     .update(tasks)
     .set({ status: status as TaskStatus })
     .where(eq(tasks.id, taskId));
+
+  await queueStatusNotification({
+    boardId: task.boardId,
+    taskId,
+    status,
+    changedById: await currentContributorId(task.boardId),
+  });
+
   await revalidateTask(taskId);
 }
 
@@ -132,17 +148,36 @@ export async function setTaskPeople(taskId: string, role: PeopleRole, contributo
     }
   }
 
+  const table =
+    role === "assignee"
+      ? taskAssignees
+      : role === "collaborator"
+        ? taskCollaborators
+        : taskStakeholders;
+
+  // Read the roster before replacing it. The write is a full delete-and-insert,
+  // so afterwards there is no way to tell who is newly on the task — and only
+  // the newcomers should hear about it.
+  const before = await db.select().from(table).where(eq(table.taskId, taskId));
+  const beforeIds = new Set(before.map((row) => row.contributorId));
+  const added = [...new Set(contributorIds)].filter((id) => !beforeIds.has(id));
+
   const rows = contributorIds.map((contributorId) => ({ taskId, contributorId }));
-  if (role === "assignee") {
-    await db.delete(taskAssignees).where(eq(taskAssignees.taskId, taskId));
-    if (rows.length) await db.insert(taskAssignees).values(rows);
-  } else if (role === "collaborator") {
-    await db.delete(taskCollaborators).where(eq(taskCollaborators.taskId, taskId));
-    if (rows.length) await db.insert(taskCollaborators).values(rows);
-  } else {
-    await db.delete(taskStakeholders).where(eq(taskStakeholders.taskId, taskId));
-    if (rows.length) await db.insert(taskStakeholders).values(rows);
+  await db.delete(table).where(eq(table.taskId, taskId));
+  if (rows.length) await db.insert(table).values(rows);
+
+  if (added.length) {
+    const actorId = await currentContributorId(task.boardId);
+    const queued = await queueAssignNotification({
+      boardId: task.boardId,
+      taskId,
+      assigneeId: added,
+      assignedById: actorId,
+    });
+    // Being handed work is worth an inbox interruption now, not in half an hour.
+    await sendInstantNotifications(task.boardId, queued);
   }
+
   await revalidateTask(taskId);
 }
 
@@ -264,42 +299,13 @@ export async function listBoardPeople(boardId: string) {
   }));
 }
 
-/**
- * Turns an account into this board's contributor, reusing the row if the
- * account has worked here before. Colour is assigned round-robin so a new face
- * is visually distinct without asking anyone to choose.
- */
-async function contributorForUser(boardId: string, userId: string) {
-  const existing = await db.query.contributors.findFirst({
-    where: and(eq(contributors.boardId, boardId), eq(contributors.userId, userId)),
-  });
-  if (existing) return existing.id;
-
-  const user = await db.query.users.findFirst({ where: eq(users.id, userId) });
-  if (!user) throw new Error("That account no longer exists");
-
-  const onBoard = await db.query.contributors.findMany({
-    where: eq(contributors.boardId, boardId),
-  });
-  const id = randomUUID();
-  await db.insert(contributors).values({
-    id,
-    boardId,
-    userId,
-    name: user.name,
-    email: user.email,
-    color: CONTRIBUTOR_COLORS[onBoard.length % CONTRIBUTOR_COLORS.length],
-  });
-  return id;
-}
-
 /** Assigns people to a task by account, creating board rows as needed. */
 export async function setTaskPeopleByUser(taskId: string, role: PeopleRole, userIds: string[]) {
   await requireUser();
   const task = await loadTask(taskId);
   const contributorIds: string[] = [];
   for (const userId of userIds) {
-    contributorIds.push(await contributorForUser(task.boardId, userId));
+    contributorIds.push(await resolveContributorForUser(task.boardId, userId));
   }
   await setTaskPeople(taskId, role, contributorIds);
 }

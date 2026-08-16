@@ -4,14 +4,16 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { docBlocks, docs, clients } from "@/db/schema";
+import { docBlocks, docs, clients, tasks } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth/session";
+import { currentContributorId } from "@/lib/auth/contributor";
+import { queueDocNotification } from "@/lib/notifications";
 import { indexDoc, removeDoc } from "@/lib/search/indexer";
 
 /**
  * Docs are their own thing: writing that belongs to a client, not work that
- * belongs to a board. Nothing here touches `tasks` — a doc may name one task it
- * briefs, and that is the only overlap.
+ * belongs to a board. The one task a doc briefs is the only overlap, and it is
+ * read here solely to find the people that task concerns.
  */
 
 async function requireUser() {
@@ -115,6 +117,30 @@ async function writeBlocks(docId: string, content: string | null) {
   return rows.length;
 }
 
+/**
+ * Tells a task's people that a doc now hangs off their task.
+ *
+ * A doc with no task is skipped: a notification row has to name a task, and a
+ * loose doc has no roster to address.
+ */
+async function announceDoc(taskId: string | null, docId: string, docTitle: string) {
+  if (!taskId) return;
+
+  const task = await db.query.tasks.findFirst({
+    where: eq(tasks.id, taskId),
+    columns: { boardId: true },
+  });
+  if (!task) return;
+
+  await queueDocNotification({
+    boardId: task.boardId,
+    taskId,
+    docId,
+    docTitle,
+    createdById: await currentContributorId(task.boardId),
+  });
+}
+
 export async function createDocument(input: {
   clientId: string;
   title: string;
@@ -146,6 +172,7 @@ export async function createDocument(input: {
     createdBy: user.id,
   });
   await writeBlocks(id, content);
+  await announceDoc(input.taskId ?? null, id, title);
   void indexDoc(id);
   revalidateDocs(input.clientId, id);
   return id;
@@ -181,6 +208,8 @@ export async function setDocumentTask(docId: string, taskId: string | null) {
   const doc = await db.query.docs.findFirst({ where: eq(docs.id, docId) });
   if (!doc) throw new Error("Doc not found");
   await db.update(docs).set({ taskId, updatedAt: new Date() }).where(eq(docs.id, docId));
+  // Only a new link is news; re-saving the same one is not.
+  if (taskId && taskId !== doc.taskId) await announceDoc(taskId, docId, doc.title);
   revalidateDocs(doc.clientId, docId);
 }
 

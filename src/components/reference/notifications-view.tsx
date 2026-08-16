@@ -1,21 +1,34 @@
-import { AtSign, Bell, CheckCircle2, MessageCircle, UserRound } from "lucide-react";
+import {
+  AtSign,
+  Bell,
+  CheckCircle2,
+  FileText,
+  ListChecks,
+  MessageCircle,
+  Plus,
+  UserRound,
+} from "lucide-react";
 import Link from "next/link";
+import type { NotificationType } from "@/db/schema";
 
 export interface NotificationItem {
   id: string;
   boardId: string;
-  type: "comment" | "move" | "assign" | "priority" | "mention";
+  type: NotificationType;
   message: string;
   context: string;
   timestamp: string;
 }
 
-const iconMap = {
+const iconMap: Record<NotificationType, typeof MessageCircle> = {
+  created: Plus,
   comment: MessageCircle,
   move: CheckCircle2,
   assign: UserRound,
   priority: Bell,
   mention: AtSign,
+  status: ListChecks,
+  doc: FileText,
 };
 
 export function NotificationsView({ notifications }: { notifications: NotificationItem[] }) {

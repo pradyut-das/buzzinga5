@@ -1,0 +1,74 @@
+/* Admin console layout corrections.
+ *
+ * The console is built from the `sq-*` design system in `desk-v2.css`, which
+ * was ported from a standalone page that owned the whole viewport. Its
+ * `.sq-main` is `position: absolute` with a hard `left: 256px` — it assumes
+ * the sheet's own `.sq-rail`, not this app's `ClientRail` shell. Loaded as-is
+ * the console escapes the shell and slides under the real sidebar.
+ *
+ * So the panels and tables are taken from that sheet and the surface geometry
+ * is put back: `.sq-main` becomes ordinary in-flow content inside the shell's
+ * padded column. Scoped to `.sq-admin-page` so nothing here reaches the routes
+ * that already load `desk-v2.css` for their own layout.
+ */
+
+.sq-admin-page .sq-main {
+  position: static;
+  inset: auto;
+  overflow: visible;
+  margin: 18px;
+  border-radius: 20px;
+}
+
+/* The header is a plain band at the top of that surface. */
+.sq-admin-page .sq-top {
+  border-radius: 20px 20px 0 0;
+}
+
+/* Tables carry their own horizontal scroll so a wide log never pushes the
+   page sideways. */
+.sq-admin-page .sq-table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sq-admin-page .sq-table th,
+.sq-admin-page .sq-table td {
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Stat tiles are links; they must not pick up underline or inherited color. */
+.sq-admin-page a.sq-metric {
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.sq-admin-page a.sq-metric:hover {
+  border-color: var(--amber-2);
+}
+
+/* `.sq-panel` in the source sheet carries only the surface; its padding comes
+   from a `.sq-section` wrapper the console does not use. Give the panels their
+   own spacing and stack them down the page. */
+.sq-admin-page .sq-panel {
+  padding: 18px;
+}
+
+/* Section heads pair a title with a caption. The base rule spaces them apart
+   on one row, which reads as two unrelated labels once the title is a heading
+   rather than an eyebrow — keep them on one line but grouped. */
+.sq-admin-page .sq-section-head {
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+.sq-admin-page .sq-section-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
