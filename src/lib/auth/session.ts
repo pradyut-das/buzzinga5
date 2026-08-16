@@ -14,7 +14,7 @@ export type SessionUser = Pick<User, "id" | "email" | "name">;
  * The row is created on first sight rather than by a signup hook, so a user
  * created directly in the Supabase dashboard still works on their first visit.
  */
-async function mirrorUser(id: string, email: string, name: string): Promise<SessionUser> {
+export async function mirrorUser(id: string, email: string, name: string): Promise<SessionUser> {
   const existing = await db.query.users.findFirst({
     where: eq(users.id, id),
     columns: { id: true, email: true, name: true },

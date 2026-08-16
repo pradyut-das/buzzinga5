@@ -12,7 +12,7 @@ import {
   taskTags,
   tasks,
 } from "@/db/schema";
-import { requireUser } from "@/lib/auth/session";
+import { requireUser, type SessionUser } from "@/lib/auth/session";
 
 /**
  * The agent never uses the board-password cookie gate. It acts on behalf of a
@@ -31,8 +31,17 @@ export interface AgentScope {
 }
 
 export async function getAgentScope(): Promise<AgentScope> {
-  const user = await requireUser();
+  return agentScopeForUser(await requireUser());
+}
 
+/**
+ * The same scope, derived from an already-authenticated user rather than from
+ * the session cookie. The MCP connector authenticates with a bearer token
+ * instead of a cookie, so it resolves the user itself and then arrives here —
+ * which keeps board membership the single source of authorization no matter
+ * which front end asked.
+ */
+export async function agentScopeForUser(user: SessionUser): Promise<AgentScope> {
   const rows = await db
     .select({
       id: boards.id,

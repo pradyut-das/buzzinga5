@@ -96,6 +96,14 @@ const serverEnvSchema = z.object({
       message: "SUPABASE_SERVICE_KEY is required in production for admin user management",
     }),
 
+  // Remote MCP connector (see docs/features/global__mcp-connector.md). The
+  // public URL is what tokens are audience-bound to, so it must match the
+  // origin Claude and ChatGPT are pointed at; unset falls back to the Vercel
+  // deployment URL. Writes are off unless explicitly turned on, which keeps a
+  // newly-added connector read-only until someone decides otherwise.
+  MCP_PUBLIC_URL: z.url({ message: "MCP_PUBLIC_URL must be a valid URL" }).optional(),
+  MCP_ALLOW_WRITES: z.enum(["true", "false"]).optional(),
+
   // Admin console allowlist - comma-separated emails. Anyone signed in with a
   // listed email reaches /admin; empty or unset turns the console off entirely.
   ADMIN_EMAILS: z.string().optional(),

@@ -186,6 +186,18 @@ export const contributors = sqliteTable("contributors", {
    * accounts rather than typed-in names. Null on rows that predate the link.
    */
   userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  /**
+   * Set when this person opts out of notification email. Kept as a timestamp
+   * rather than a flag so we can tell when they left, and clearing the column
+   * is all it takes to re-subscribe.
+   */
+  unsubscribedAt: integer("unsubscribed_at", { mode: "timestamp" }),
+  /**
+   * Bearer secret for the unsubscribe link. The token is the only credential —
+   * the link has to work from an inbox, without a session. Minted lazily the
+   * first time a digest is addressed to this person.
+   */
+  unsubscribeToken: text("unsubscribe_token").unique(),
 });
 
 // Task assignees - many-to-many
@@ -278,7 +290,16 @@ export const comments = sqliteTable("comments", {
 });
 
 // Pending notifications - queue for batching email notifications
-export const NOTIFICATION_TYPES = ["comment", "move", "assign", "priority", "mention"] as const;
+export const NOTIFICATION_TYPES = [
+  "created",
+  "comment",
+  "move",
+  "assign",
+  "priority",
+  "mention",
+  "status",
+  "doc",
+] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export const pendingNotifications = sqliteTable("pending_notifications", {
@@ -545,6 +566,141 @@ export const integrationSyncs = sqliteTable("integration_syncs", {
   lastSyncAt: integer("last_sync_at", { mode: "timestamp" }),
   detail: text("detail"),
 });
+
+// AI usage ledger (see ADR global__ai-usage-metering).
+//
+// One immutable row per model call. Nothing updates or deletes these rows:
+// when spend looks wrong, this table is the source of truth for what was
+// actually asked of the provider, by whom, and what it cost. A call that
+// fails or is refused by the rate limiter is recorded too — a missing row
+// would make a broken key look identical to an idle day.
+export const AI_SURFACES = [
+  "chat",
+  "voice",
+  "voice_tool",
+  "mcp_tool",
+  "embedding",
+  "unknown",
+] as const;
+export type AiSurface = (typeof AI_SURFACES)[number];
+
+export const AI_CALL_STATUSES = ["ok", "error", "blocked"] as const;
+export type AiCallStatus = (typeof AI_CALL_STATUSES)[number];
+
+export const aiUsage = sqliteTable(
+  "ai_usage",
+  {
+    id: text("id").primaryKey(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    // Kept as plain columns rather than foreign keys: the ledger has to
+    // survive the deletion of the user or board it refers to, or an account
+    // deletion would erase the evidence of what that account spent.
+    userId: text("user_id"),
+    userEmail: text("user_email"),
+    surface: text("surface").notNull(), // AI_SURFACES
+    operation: text("operation").notNull(), // generateContent | embedContent | liveSession | ...
+    model: text("model").notNull(),
+    status: text("status").notNull(), // AI_CALL_STATUSES
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    thoughtTokens: integer("thought_tokens").notNull().default(0),
+    cachedTokens: integer("cached_tokens").notNull().default(0),
+    totalTokens: integer("total_tokens").notNull().default(0),
+    // Micro-USD (millionths) so cost stays an exact integer. Floats would
+    // drift over a month of accumulation and make a bill impossible to tie out.
+    costMicroUsd: integer("cost_micro_usd").notNull().default(0),
+    // True when the provider reported no usage and the cost is derived from
+    // an estimate (Live audio minutes), so a report never presents a guess
+    // as a measurement.
+    estimated: integer("estimated", { mode: "boolean" }).notNull().default(false),
+    durationMs: integer("duration_ms").notNull().default(0),
+    // Populated on status "error" and "blocked" — the reason the spend did
+    // not happen is as important as the spend itself.
+    errorMessage: text("error_message"),
+    // The limit that refused the call, e.g. "user_day_usd".
+    blockedBy: text("blocked_by"),
+    /** Free-form JSON: tool names, step index, request id. Never PII-bearing content. */
+    detail: text("detail"),
+  },
+  (table) => [
+    index("ai_usage_created_idx").on(table.createdAt),
+    index("ai_usage_user_created_idx").on(table.userId, table.createdAt),
+    index("ai_usage_surface_created_idx").on(table.surface, table.createdAt),
+  ],
+);
+
+// Voice sessions that were granted a token and charged up front.
+//
+// The up-front charge and the refund that settles it happen in two separate
+// requests, so the reservation has to outlive the first one: without a stored
+// row, the settlement endpoint has no way to tell a real session from an id a
+// client invented, and every refund is credit minted from nothing.
+//
+// The row is what makes the refund safe. It records who was charged and how
+// much, so a settlement can only ever be claimed by its owner and can only
+// ever give back what this session actually paid.
+export const aiVoiceSessions = sqliteTable(
+  "ai_voice_sessions",
+  {
+    id: text("id").primaryKey(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    /** Who was charged. A settlement from anyone else is refused. */
+    userId: text("user_id").notNull(),
+    /** Micro-USD charged up front; the refund is clamped to this. */
+    chargedMicroUsd: integer("charged_micro_usd").notNull(),
+    /** Set once settled, so a replayed settlement refunds nothing. */
+    settledAt: integer("settled_at", { mode: "timestamp" }),
+  },
+  (table) => [index("ai_voice_sessions_user_idx").on(table.userId)],
+);
+
+// Rolling rate-limit counters, one row per (subject, window bucket).
+//
+// Separate from the ledger on purpose: a limit check runs before every model
+// call, and aggregating the whole ledger to answer it would get slower exactly
+// as usage grows. Each row is a single indexed primary-key read.
+export const aiUsageCounters = sqliteTable(
+  "ai_usage_counters",
+  {
+    /** "user:<id>", or "global" for the agency-wide caps. */
+    subject: text("subject").notNull(),
+    /** minute | day */
+    window: text("window").notNull(),
+    /** Unix seconds at the start of the bucket. */
+    bucketStart: integer("bucket_start").notNull(),
+    calls: integer("calls").notNull().default(0),
+    totalTokens: integer("total_tokens").notNull().default(0),
+    costMicroUsd: integer("cost_micro_usd").notNull().default(0),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.subject, table.window, table.bucketStart] }),
+    index("ai_usage_counters_bucket_idx").on(table.bucketStart),
+  ],
+);
+
+// Rolling counters capping how much notification email one person can be sent.
+//
+// Same shape and reasoning as ai_usage_counters: a cap is checked before every
+// send, and a single primary-key read answers it no matter how much mail has
+// gone out historically.
+export const emailSendCounters = sqliteTable(
+  "email_send_counters",
+  {
+    /** The contributor being written to, as "contributor:<id>". */
+    subject: text("subject").notNull(),
+    /** hour | day */
+    window: text("window").notNull(),
+    /** Unix seconds at the start of the bucket. */
+    bucketStart: integer("bucket_start").notNull(),
+    emails: integer("emails").notNull().default(0),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.subject, table.window, table.bucketStart] }),
+    index("email_send_counters_bucket_idx").on(table.bucketStart),
+  ],
+);
 
 // ============================================================
 // RELATIONS
